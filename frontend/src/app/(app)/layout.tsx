@@ -3,6 +3,8 @@ import { Logo } from "@/components/ui/logo";
 import { AppNavigation, MobileNav } from "@/components/navigation/app-navigation";
 import { Bell, HelpCircle, Settings } from "lucide-react";
 import { PropsWithChildren } from "react";
+import { ReactQueryProvider } from "../providers/react-query";
+import { ToastContainer } from "@/components/ui/toast-container";
 
 function HeaderActions() {
   return (
@@ -46,44 +48,47 @@ function HeaderActions() {
 
 export default function AppLayout({ children }: PropsWithChildren) {
   return (
-    <div className="relative flex min-h-screen flex-col bg-background text-foreground">
-      <header className="glass-panel border-b border-border/60">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-6">
-            <Logo />
-            <MobileNav />
+    <ReactQueryProvider>
+      <div className="relative flex min-h-screen flex-col bg-background text-foreground">
+        <ToastContainer />
+        <header className="glass-panel border-b border-border/60">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-6">
+              <Logo />
+              <MobileNav />
+            </div>
+            <div className="hidden md:block">
+              {/* <AppNavigation /> */}
+            </div>
+            <HeaderActions />
           </div>
-          <div className="hidden md:block">
-            {/* <AppNavigation /> */}
-          </div>
-          <HeaderActions />
+        </header>
+
+        <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 pb-8 pt-6 md:px-6 lg:pb-12">
+          <aside className="sticky top-24 hidden h-fit w-60 shrink-0 rounded-3xl border border-border/80 bg-surface/95 p-4 shadow-lg shadow-primary/5 md:block">
+            <div className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Workspace
+            </div>
+            <AppNavigation />
+            <div className="mt-6 rounded-2xl bg-primary/6 p-4 text-sm text-muted-foreground">
+              <p className="mb-2 font-semibold text-primary">Need help?</p>
+              <p>Open a support ticket or call OnTrack concierge anytime.</p>
+              <Link
+                href="/support"
+                className="mt-3 inline-flex items-center text-primary underline-offset-4 hover:underline"
+              >
+                Visit Support Center
+              </Link>
+            </div>
+          </aside>
+
+          <main className="flex-1">
+            <div className="rounded-3xl border border-border/60 bg-surface/95 p-6 shadow-lg shadow-primary/10 md:p-10">
+              {children}
+            </div>
+          </main>
         </div>
-      </header>
-
-      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 pb-8 pt-6 md:px-6 lg:pb-12">
-        <aside className="sticky top-24 hidden h-fit w-60 shrink-0 rounded-3xl border border-border/80 bg-surface/95 p-4 shadow-lg shadow-primary/5 md:block">
-          <div className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Workspace
-          </div>
-          <AppNavigation />
-          <div className="mt-6 rounded-2xl bg-primary/6 p-4 text-sm text-muted-foreground">
-            <p className="mb-2 font-semibold text-primary">Need help?</p>
-            <p>Open a support ticket or call OnTrack concierge anytime.</p>
-            <Link
-              href="/support"
-              className="mt-3 inline-flex items-center text-primary underline-offset-4 hover:underline"
-            >
-              Visit Support Center
-            </Link>
-          </div>
-        </aside>
-
-        <main className="flex-1">
-          <div className="rounded-3xl border border-border/60 bg-surface/95 p-6 shadow-lg shadow-primary/10 md:p-10">
-            {children}
-          </div>
-        </main>
       </div>
-    </div>
+    </ReactQueryProvider>
   );
 }

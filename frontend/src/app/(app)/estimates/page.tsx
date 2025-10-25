@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CalendarClock, ClipboardCheck, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -39,63 +41,149 @@ type EstimateSummary = {
   };
 };
 
+type ScheduleJobInput = {
+  estimateId: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+};
+
+async function fetchEstimates(): Promise<EstimateSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/estimates`, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to load estimates: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+type CreatedJob = {
+  id: string;
+  status: string;
+  scheduledStart?: string | null;
+};
+
+async function createJob(payload: ScheduleJobInput): Promise<CreatedJob> {
+  const response = await fetch(`${API_BASE_URL}/jobs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Job creation failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export default function EstimatesPage() {
-  const [estimates, setEstimates] = useState<EstimateSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
   const [jobForm, setJobForm] = useState<{
     estimateId: string;
     start: string;
     end: string;
-    submitting: boolean;
-    error: string | null;
   }>({
     estimateId: "",
     start: "",
     end: "",
-    submitting: false,
-    error: null,
+  });
+  const [jobFormError, setJobFormError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const {
+    data,
+    isLoading,
+    error,
+    isFetching,
+  } = useQuery<EstimateSummary[], Error>({
+    queryKey: ["estimates"],
+    queryFn: fetchEstimates,
   });
 
-  useEffect(() => {
-    void loadEstimates();
-  }, []);
-
-  async function loadEstimates() {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/estimates`, {
-        headers: {
-          "Content-Type": "application/json",
-          "X-Tenant-ID": TENANT_HEADER,
-        },
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to load estimates: ${response.status}`);
+  const scheduleJobMutation = useMutation<CreatedJob, Error, ScheduleJobInput>({
+    mutationFn: createJob,
+    onMutate: async (input) => {
+      setJobFormError(null);
+      await queryClient.cancelQueries({ queryKey: ["estimates"] });
+      const previousEstimates = queryClient.getQueryData<EstimateSummary[]>(["estimates"]);
+      if (previousEstimates) {
+        const optimisticId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `temp-${Math.random().toString(36).slice(2)}`;
+        const optimisticJob = {
+          id: optimisticId,
+          status: "SCHEDULED",
+          scheduledStart: input.scheduledStart ?? null,
+        };
+        queryClient.setQueryData<EstimateSummary[]>(["estimates"], previousEstimates.map((estimate) =>
+          estimate.id === input.estimateId
+            ? { ...estimate, job: optimisticJob }
+            : estimate,
+        ));
       }
+      return { previousEstimates };
+    },
+    onError: (mutationError, _input, context) => {
+      if (context?.previousEstimates) {
+        queryClient.setQueryData(["estimates"], context.previousEstimates);
+      }
+      setJobFormError(mutationError.message);
+      toast({
+        variant: "destructive",
+        title: "Unable to schedule job",
+        description: mutationError.message,
+      });
+    },
+    onSuccess: (job, input) => {
+      queryClient.setQueryData<EstimateSummary[]>(["estimates"], (current) =>
+        current?.map((estimate) =>
+          estimate.id === input.estimateId
+            ? {
+                ...estimate,
+                job: {
+                  id: job.id,
+                  status: job.status,
+                  scheduledStart: job.scheduledStart ?? null,
+                },
+              }
+            : estimate,
+        ),
+      );
+      toast({
+        variant: "success",
+        title: "Job scheduled",
+        description: "Job has been added to the work board.",
+      });
+      resetJobForm();
+    },
+    onSettled: (_data, _error, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["estimates"] });
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+    },
+  });
 
-      const payload: EstimateSummary[] = await response.json();
-      setEstimates(payload);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to load estimates";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const estimates = data ?? [];
+  const hasData = estimates.length > 0;
 
   function openJobForm(estimate: EstimateSummary) {
     setJobForm({
       estimateId: estimate.id,
       start: estimate.job?.scheduledStart ? toDateTimeLocal(estimate.job.scheduledStart) : defaultStart(),
       end: "",
-      submitting: false,
-      error: null,
     });
+    setJobFormError(null);
   }
 
   function resetJobForm() {
@@ -103,51 +191,29 @@ export default function EstimatesPage() {
       estimateId: "",
       start: "",
       end: "",
-      submitting: false,
-      error: null,
+    });
+    setJobFormError(null);
+  }
+
+  function handleScheduleJob(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!jobForm.estimateId || !jobForm.start) {
+      setJobFormError("Start time is required");
+      return;
+    }
+
+    setJobFormError(null);
+
+    scheduleJobMutation.mutate({
+      estimateId: jobForm.estimateId,
+      scheduledStart: new Date(jobForm.start).toISOString(),
+      scheduledEnd: jobForm.end ? new Date(jobForm.end).toISOString() : undefined,
     });
   }
 
-  async function handleScheduleJob(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!jobForm.estimateId) return;
-
-    setJobForm((prev) => ({ ...prev, submitting: true, error: null }));
-
-    try {
-      const payload: Record<string, unknown> = {
-        estimateId: jobForm.estimateId,
-      };
-
-      if (jobForm.start) {
-        payload.scheduledStart = new Date(jobForm.start).toISOString();
-      }
-      if (jobForm.end) {
-        payload.scheduledEnd = new Date(jobForm.end).toISOString();
-      }
-
-      const response = await fetch(`${API_BASE_URL}/jobs`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Tenant-ID": TENANT_HEADER,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Job creation failed: ${response.status}`);
-      }
-
-      resetJobForm();
-      await loadEstimates();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to schedule job";
-      setJobForm((prev) => ({ ...prev, error: message }));
-    } finally {
-      setJobForm((prev) => ({ ...prev, submitting: false }));
-    }
-  }
+  const isSubmittingJob = scheduleJobMutation.isPending;
+  const fetchError = error?.message ?? null;
+  const showLoading = isLoading || isFetching;
 
   return (
     <div className="space-y-6">
@@ -164,18 +230,18 @@ export default function EstimatesPage() {
         </div>
       </header>
 
-      {error && (
+      {fetchError && (
         <div className="rounded-3xl border border-accent/40 bg-accent/15 px-4 py-3 text-sm text-accent-foreground">
-          {error}
+          {fetchError}
         </div>
       )}
 
-      {loading ? (
+      {showLoading ? (
         <div className="flex items-center gap-3 rounded-3xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           Loading estimates…
         </div>
-      ) : estimates.length === 0 ? (
+      ) : !hasData ? (
         <div className="rounded-3xl border border-dashed border-border/80 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
           No estimates yet. Convert leads into proposals to see them appear here.
         </div>
@@ -193,7 +259,9 @@ export default function EstimatesPage() {
                     {estimate.lead.contactName ?? "Unnamed contact"} · {estimate.lead.stage.replace("_", " ")}
                   </p>
                   {estimate.notes && (
-                    <p className="mt-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{estimate.notes}</p>
+                    <p className="mt-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      {estimate.notes}
+                    </p>
                   )}
                 </div>
                 <div className="flex items-center gap-3 text-sm">
@@ -206,32 +274,15 @@ export default function EstimatesPage() {
                 </div>
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">Subtotal</span>
-                  <div>{formatCurrency(estimate.subtotal)}</div>
-                </div>
-                <div className="rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">Tax</span>
-                  <div>{formatCurrency(estimate.tax)}</div>
-                </div>
-                <div className="rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">Approvals</span>
-                  <div>{estimate.approvals}</div>
-                </div>
+                <StatusCard label="Subtotal" value={formatCurrency(estimate.subtotal)} />
+                <StatusCard label="Tax" value={formatCurrency(estimate.tax)} />
+                <StatusCard label="Approvals" value={estimate.approvals.toString()} />
               </div>
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-semibold uppercase text-muted-foreground">Line items</p>
                 <div className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
-              {estimate.lineItems.map((item) => (
-                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 py-2 last:border-none">
-                      <div>
-                        <p className="font-medium text-foreground">{item.description}</p>
-                        <p className="text-xs">
-                          Qty {item.quantity} × {formatCurrency(item.unitPrice)}
-                        </p>
-                      </div>
-                      <p className="text-sm font-semibold text-foreground">{formatCurrency(item.total)}</p>
-                    </div>
+                  {estimate.lineItems.map((item) => (
+                    <LineItemRow key={item.id} item={item} />
                   ))}
                 </div>
               </div>
@@ -287,9 +338,9 @@ export default function EstimatesPage() {
                         <button
                           type="submit"
                           className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
-                          disabled={jobForm.submitting}
+                          disabled={isSubmittingJob}
                         >
-                          {jobForm.submitting && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {isSubmittingJob && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
                           Create job
                         </button>
                         <button
@@ -299,9 +350,7 @@ export default function EstimatesPage() {
                         >
                           Cancel
                         </button>
-                        {jobForm.error && (
-                          <span className="text-xs text-accent">{jobForm.error}</span>
-                        )}
+                        {jobFormError && <span className="text-xs text-accent">{jobFormError}</span>}
                       </form>
                     )}
                   </>
@@ -311,6 +360,29 @@ export default function EstimatesPage() {
           ))}
         </section>
       )}
+    </div>
+  );
+}
+
+function StatusCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+      <span className="font-semibold text-foreground">{label}</span>
+      <div>{value}</div>
+    </div>
+  );
+}
+
+function LineItemRow({ item }: { item: EstimateSummary["lineItems"][number] }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 py-2 last:border-none">
+      <div>
+        <p className="font-medium text-foreground">{item.description}</p>
+        <p className="text-xs">
+          Qty {item.quantity} × {formatCurrency(item.unitPrice)}
+        </p>
+      </div>
+      <p className="text-sm font-semibold text-foreground">{formatCurrency(item.total)}</p>
     </div>
   );
 }

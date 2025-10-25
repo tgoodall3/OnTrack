@@ -41,4 +41,4 @@ OnTrack is a multi-tenant SaaS that guides contractors from lead intake through 
 - Monorepo scaffolding is in place with Next.js frontend and NestJS backend skeletons.
 - Dashboard pulls live tenant-scoped metrics with Leads, Estimates, and Jobs modules now exposing CRUD APIs and starter UIs.
 - Prisma schema defines tenant, role, and operational domain entities with a seed script for demo data.
-- Next steps: expand core domain modules (Estimates, Jobs, Tasks), wire auth/RBAC, and stand up observability + CI tooling per roadmap.
+- Next steps: wire auth/RBAC, stand up observability + CI tooling, and deepen task/crew workflows per roadmap.

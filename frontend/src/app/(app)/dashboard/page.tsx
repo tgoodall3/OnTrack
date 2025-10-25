@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   CalendarClock,
@@ -10,6 +10,7 @@ import {
   MapPin,
   Users,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -36,6 +37,22 @@ type DashboardMetrics = {
     status: string;
   }>;
 };
+
+async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
+  const response = await fetch(`${API_BASE_URL}/dashboard/summary`, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Dashboard request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -70,54 +87,15 @@ function greetingForDate(date: Date) {
 }
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardMetrics | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: metrics,
+    isLoading,
+    error,
+  } = useQuery<DashboardMetrics, Error>({
+    queryKey: ["dashboard", "summary"],
+    queryFn: fetchDashboardMetrics,
+  });
 
-  useEffect(() => {
-    let isMounted = true;
-    const controller = new AbortController();
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`${API_BASE_URL}/dashboard/summary`, {
-          headers: {
-            "Content-Type": "application/json",
-            "X-Tenant-ID": TENANT_HEADER,
-          },
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Dashboard request failed: ${response.status}`);
-        }
-
-        const payload: DashboardMetrics = await response.json();
-        if (isMounted) {
-          setData(payload);
-        }
-      } catch (err) {
-        if (isMounted && !(err instanceof DOMException && err.name === "AbortError")) {
-          setError(err instanceof Error ? err.message : "Unable to load dashboard data");
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      isMounted = false;
-      controller.abort();
-    };
-  }, []);
-
-  const metrics = data;
   const now = useMemo(() => new Date(), []);
   const heroVisit = metrics?.nextVisits?.[0];
   const upcomingVisits = metrics?.nextVisits ?? [];
@@ -231,7 +209,7 @@ export default function DashboardPage() {
 
       {error && (
         <div className="rounded-3xl border border-accent/40 bg-accent/15 px-4 py-3 text-sm text-accent-foreground">
-          {error}. Showing the latest saved snapshot where available.
+          {error.message}
         </div>
       )}
 
@@ -300,7 +278,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
-            {!upcomingVisits.length && !loading && (
+            {!upcomingVisits.length && !isLoading && (
               <div className="rounded-2xl border border-dashed border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground">
                 No visits scheduled yet. Once jobs are assigned crews, they will appear here automatically.
               </div>
@@ -340,10 +318,10 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {loading && (
+      {isLoading && (
         <div className="text-sm text-muted-foreground">Syncing live data… please wait.</div>
       )}
-      {!loading && !metrics && (
+      {!isLoading && !metrics && (
         <div className="rounded-3xl border border-dashed border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
           Unable to load live metrics yet. Check your API URL or tenant header configuration.
         </div>

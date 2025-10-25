@@ -13,6 +13,7 @@ import { ContactsModule } from './contacts/contacts.module';
 import { PropertiesModule } from './properties/properties.module';
 import { EstimatesModule } from './estimates/estimates.module';
 import { JobsModule } from './jobs/jobs.module';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { JobsModule } from './jobs/jobs.module';
     PropertiesModule,
     EstimatesModule,
     JobsModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
