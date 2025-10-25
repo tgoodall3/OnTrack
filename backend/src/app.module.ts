@@ -11,6 +11,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { LeadsModule } from './leads/leads.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { PropertiesModule } from './properties/properties.module';
+import { EstimatesModule } from './estimates/estimates.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { PropertiesModule } from './properties/properties.module';
     LeadsModule,
     ContactsModule,
     PropertiesModule,
+    EstimatesModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

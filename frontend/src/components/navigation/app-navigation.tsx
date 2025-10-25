@@ -23,6 +23,7 @@ export type AppNavItem = {
 const NAV_ITEMS: AppNavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Leads", href: "/leads", icon: Users },
+  { label: "Estimates", href: "/estimates", icon: ClipboardList },
   { label: "Work", href: "/work", icon: ClipboardList },
   { label: "Schedule", href: "/schedule", icon: CalendarCheck },
   { label: "Billing", href: "/billing", icon: CreditCard },

@@ -18,6 +18,7 @@ export interface DashboardMetrics {
     newLeads: number;
     estimatesSent: number;
     approved: number;
+    jobsScheduled: number;
     pipelineValue: number;
   };
   nextVisits: Array<{
@@ -65,6 +66,7 @@ export class DashboardService {
       estimatesSent,
       estimatesApproved,
       pipelineTotals,
+      jobsScheduled,
       upcomingJobs,
     ] = await Promise.all([
       this.prisma.job.count({
@@ -145,6 +147,21 @@ export class DashboardService {
           total: true,
         },
       }),
+      this.prisma.job.count({
+        where: {
+          tenantId,
+          status: {
+            in: [
+              JobStatus.SCHEDULED,
+              JobStatus.IN_PROGRESS,
+              JobStatus.COMPLETED,
+            ],
+          },
+          createdAt: {
+            gte: lookbackStart,
+          },
+        },
+      }),
       this.prisma.job.findMany({
         where: {
           tenantId,
@@ -219,6 +236,7 @@ export class DashboardService {
         newLeads,
         estimatesSent,
         approved: estimatesApproved,
+        jobsScheduled,
         pipelineValue,
       },
       nextVisits: upcomingJobs.map((job) => this.toUpcomingVisit(job, now)),

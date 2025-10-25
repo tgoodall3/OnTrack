@@ -24,6 +24,7 @@ type DashboardMetrics = {
     newLeads: number;
     estimatesSent: number;
     approved: number;
+    jobsScheduled: number;
     pipelineValue: number;
   };
   nextVisits: Array<{
@@ -144,7 +145,9 @@ export default function DashboardPage() {
       {
         label: "Pipeline Value",
         value: metrics ? formatCurrency(metrics.pipeline.pipelineValue) : "—",
-        trend: metrics ? `${metrics.pipeline.approved} approved jobs` : "Awaiting data",
+        trend: metrics
+          ? `${metrics.pipeline.jobsScheduled} jobs scheduled in the last 7 days`
+          : "Awaiting data",
         icon: Coins,
       },
       {
@@ -172,11 +175,13 @@ export default function DashboardPage() {
           : "Awaiting data",
       },
       {
-        stage: "Approved & Scheduled",
-        total: metrics?.pipeline.approved ?? 0,
+        stage: "Jobs Scheduled",
+        total: metrics?.pipeline.jobsScheduled ?? 0,
         highlight: heroVisit
           ? `Next visit ${formatDateTime(heroVisit.scheduledAt)}`
-          : "Next open slot pending",
+          : metrics
+            ? "Converted jobs in the last 7 days"
+            : "Next open slot pending",
       },
     ],
     [metrics, heroVisit],
