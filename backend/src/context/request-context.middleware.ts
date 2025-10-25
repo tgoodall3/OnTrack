@@ -14,19 +14,28 @@ export class RequestContextMiddleware implements NestMiddleware {
   constructor(private readonly context: RequestContextService) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
-    const requestId = (req.headers[REQUEST_ID_HEADER] as string | undefined) ?? randomUUID();
+    const requestId =
+      (req.headers[REQUEST_ID_HEADER] as string | undefined) ?? randomUUID();
     const tenantId = req.headers[TENANT_HEADER] as string | undefined;
     const userId = req.headers[USER_HEADER] as string | undefined;
 
     this.context.run({ requestId, tenantId, userId }, () => {
-      (req as Request & { requestId?: string; tenantId?: string; userId?: string }).requestId = requestId;
+      (
+        req as Request & {
+          requestId?: string;
+          tenantId?: string;
+          userId?: string;
+        }
+      ).requestId = requestId;
       (req as Request & { tenantId?: string }).tenantId = tenantId;
       (req as Request & { userId?: string }).userId = userId;
 
       res.setHeader(REQUEST_ID_HEADER, requestId);
 
       if (!tenantId) {
-        this.logger.debug(`Request ${requestId} missing ${TENANT_HEADER} header`);
+        this.logger.debug(
+          `Request ${requestId} missing ${TENANT_HEADER} header`,
+        );
       }
 
       next();

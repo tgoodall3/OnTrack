@@ -23,7 +23,7 @@ OnTrack is a multi-tenant SaaS that guides contractors from lead intake through 
 4. Generate the Prisma client and database schema:
    - `pnpm --filter @ontrack/api prisma:generate`
    - `pnpm --filter @ontrack/api prisma:migrate`
-   - `pnpm --filter @ontrack/api db:seed`b
+   - `pnpm --filter @ontrack/api db:seed`
 5. Start services locally with `pnpm dev` to run we + API together, or `pnpm dev:web` / `pnpm dev:api` to run individually.
 
 ### Local Support Services
@@ -39,5 +39,6 @@ OnTrack is a multi-tenant SaaS that guides contractors from lead intake through 
 ## Current Status
 - Architectural plans and roadmap are documented.
 - Monorepo scaffolding is in place with Next.js frontend and NestJS backend skeletons.
+- Dashboard pulls live tenant-scoped metrics and the Leads vertical slice supports create/update/delete with contact & property lookups.
 - Prisma schema defines tenant, role, and operational domain entities with a seed script for demo data.
-- Next steps: finalize tooling setup (pnpm, Turbo), configure environment templates, and begin implementing feature modules per roadmap.
+- Next steps: expand core domain modules (Estimates, Jobs, Tasks), wire auth/RBAC, and stand up observability + CI tooling per roadmap.

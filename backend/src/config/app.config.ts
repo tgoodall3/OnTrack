@@ -19,7 +19,11 @@ export const createAppConfig = (env: Env): AppConfig => ({
     nodeEnv: env.NODE_ENV,
     host: env.HOST ?? '0.0.0.0',
     port: env.PORT ? Number(env.PORT) : 4000,
-    corsOrigins: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean) : null,
+    corsOrigins: env.CORS_ORIGINS
+      ? env.CORS_ORIGINS.split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean)
+      : null,
   },
   database: {
     url: env.DATABASE_URL,

@@ -13,7 +13,10 @@ export interface RequestContext {
 export class RequestContextService {
   private readonly storage = new AsyncLocalStorage<RequestContext>();
 
-  run(context: Omit<RequestContext, 'requestId'> & { requestId?: string }, callback: () => void) {
+  run(
+    context: Omit<RequestContext, 'requestId'> & { requestId?: string },
+    callback: () => void,
+  ) {
     const payload: RequestContext = {
       requestId: context.requestId ?? randomUUID(),
       tenantId: context.tenantId,

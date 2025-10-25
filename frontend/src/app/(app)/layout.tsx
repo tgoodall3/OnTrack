@@ -54,7 +54,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
             <MobileNav />
           </div>
           <div className="hidden md:block">
-            <AppNavigation />
+            {/* <AppNavigation /> */}
           </div>
           <HeaderActions />
         </div>

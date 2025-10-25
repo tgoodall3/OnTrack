@@ -44,7 +44,10 @@ async function bootstrap() {
   const { port, host } = appConfig;
 
   await app.listen(port, host);
-  Logger.log(`dYs? OnTrack API listening on http://${host}:${port}`, 'Bootstrap');
+  Logger.log(
+    `dYs? OnTrack API listening on http://${host}:${port}`,
+    'Bootstrap',
+  );
 }
 
 bootstrap();

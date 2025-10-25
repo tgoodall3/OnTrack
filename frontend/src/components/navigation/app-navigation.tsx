@@ -7,6 +7,7 @@ import {
   CreditCard,
   FolderOpen,
   LayoutDashboard,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -21,6 +22,7 @@ export type AppNavItem = {
 
 const NAV_ITEMS: AppNavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Leads", href: "/leads", icon: Users },
   { label: "Work", href: "/work", icon: ClipboardList },
   { label: "Schedule", href: "/schedule", icon: CalendarCheck },
   { label: "Billing", href: "/billing", icon: CreditCard },

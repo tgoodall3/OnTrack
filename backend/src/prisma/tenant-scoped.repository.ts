@@ -1,18 +1,18 @@
 import { PrismaService } from './prisma.service';
 
-type DelegateMethodArgs<TDelegate, TMethod extends keyof TDelegate> = TDelegate[TMethod] extends (
-  ...args: infer A
-) => any
-  ? A
-  : never;
+type DelegateMethodArgs<
+  TDelegate,
+  TMethod extends keyof TDelegate,
+> = TDelegate[TMethod] extends (...args: infer A) => any ? A : never;
 
-type DelegateMethodReturn<TDelegate, TMethod extends keyof TDelegate> = TDelegate[TMethod] extends (
-  ...args: any[]
-) => infer R
-  ? R
-  : never;
+type DelegateMethodReturn<
+  TDelegate,
+  TMethod extends keyof TDelegate,
+> = TDelegate[TMethod] extends (...args: any[]) => infer R ? R : never;
 
-export abstract class TenantScopedRepository<TDelegate extends Record<string, any>> {
+export abstract class TenantScopedRepository<
+  TDelegate extends Record<string, any>,
+> {
   protected constructor(protected readonly prisma: PrismaService) {}
 
   protected abstract get model(): TDelegate;
@@ -25,9 +25,9 @@ export abstract class TenantScopedRepository<TDelegate extends Record<string, an
     return this.prisma.getTenantId();
   }
 
-  async findUnique<TArgs extends DelegateMethodArgs<TDelegate, 'findUnique'>[0]>(
-    args: TArgs,
-  ): Promise<DelegateMethodReturn<TDelegate, 'findUnique'>> {
+  async findUnique<
+    TArgs extends DelegateMethodArgs<TDelegate, 'findUnique'>[0],
+  >(args: TArgs): Promise<DelegateMethodReturn<TDelegate, 'findUnique'>> {
     return this.model.findUnique(args);
   }
 
