@@ -1,0 +1,506 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DATABASE_DIRECT_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model Tenant {
+  id                 String              @id @default(cuid())
+  name               String
+  slug               String              @unique
+  plan               TenantPlan          @default(STANDARD)
+  billingCustomerId  String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  activities         ActivityLog[]
+  checklistTemplates ChecklistTemplate[]
+  contacts           Contact[]
+  estimates          Estimate[]
+  files              File[]
+  invoices           Invoice[]
+  jobs               Job[]
+  leads              Lead[]
+  materialUsage      MaterialUsage[]
+  notifications      Notification[]
+  payments           Payment[]
+  properties         Property[]
+  roles              Role[]              @relation("TenantRoles")
+  SavedView          SavedView[]
+  tasks              Task[]
+  timeEntries        TimeEntry[]
+  users              User[]
+
+  @@index([slug])
+}
+
+model User {
+  id                   String              @id @default(cuid())
+  tenantId             String
+  email                String
+  name                 String?
+  authProvider         AuthProvider        @default(MAGIC_LINK)
+  active               Boolean             @default(true)
+  metadata             Json?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  activityLogs         ActivityLog[]       @relation("ActivityActor")
+  estimateApprovals    EstimateApproval[]  @relation("EstimateApprover")
+  uploadedFiles        File[]              @relation("FileUploader")
+  notifications        Notification[]
+  savedViews           SavedView[]         @relation("UserSavedViews")
+  assignedTasks        Task[]              @relation("TaskAssignee")
+  checklistAssignments TaskChecklistItem[] @relation("TaskChecklistAssignment")
+  timeEntries          TimeEntry[]
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleAssignments      UserRole[]
+
+  @@unique([tenantId, email])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  tenantId    String?
+  key         RoleKey?
+  name        String
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  tenant      Tenant?          @relation("TenantRoles", fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  members     UserRole[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model Contact {
+  id         String      @id @default(cuid())
+  tenantId   String
+  type       ContactType
+  name       String
+  email      String?
+  phone      String?
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads      Lead[]
+  properties Property[]
+
+  @@index([tenantId, type])
+}
+
+model Property {
+  id        String   @id @default(cuid())
+  tenantId  String
+  contactId String?
+  address   Json
+  geo       Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  jobs      Job[]
+  leads     Lead[]
+  contact   Contact? @relation(fields: [contactId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model Lead {
+  id         String     @id @default(cuid())
+  tenantId   String
+  contactId  String
+  propertyId String?
+  source     String?
+  stage      LeadStage  @default(NEW)
+  notes      String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  estimates  Estimate[]
+  jobs       Job[]
+  contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  property   Property?  @relation(fields: [propertyId], references: [id])
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, stage])
+}
+
+model Estimate {
+  id        String             @id @default(cuid())
+  tenantId  String
+  leadId    String
+  number    String
+  status    EstimateStatus     @default(DRAFT)
+  subtotal  Decimal            @default(0) @db.Decimal(12, 2)
+  tax       Decimal            @default(0) @db.Decimal(12, 2)
+  total     Decimal            @default(0) @db.Decimal(12, 2)
+  expiresAt DateTime?
+  notes     String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  lead      Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  approvals EstimateApproval[]
+  lineItems EstimateLineItem[]
+  files     File[]
+  job       Job?
+
+  @@unique([tenantId, number])
+}
+
+model EstimateLineItem {
+  id          String   @id @default(cuid())
+  estimateId  String
+  description String
+  quantity    Decimal  @default(0) @db.Decimal(10, 2)
+  unitPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  costCode    String?
+  metadata    Json?
+  estimate    Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+}
+
+model EstimateApproval {
+  id         String         @id @default(cuid())
+  estimateId String
+  approverId String?
+  approvedAt DateTime?
+  status     EstimateStatus @default(SENT)
+  signature  Json?
+  approver   User?          @relation("EstimateApprover", fields: [approverId], references: [id])
+  estimate   Estimate       @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+}
+
+model Job {
+  id             String          @id @default(cuid())
+  tenantId       String
+  leadId         String?
+  estimateId     String?         @unique
+  propertyId     String?
+  status         JobStatus       @default(DRAFT)
+  scheduledStart DateTime?
+  scheduledEnd   DateTime?
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  files          File[]
+  invoices       Invoice[]
+  estimate       Estimate?       @relation(fields: [estimateId], references: [id])
+  lead           Lead?           @relation(fields: [leadId], references: [id])
+  property       Property?       @relation(fields: [propertyId], references: [id])
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  materials      MaterialUsage[]
+  tasks          Task[]
+  timeEntries    TimeEntry[]
+
+  @@index([tenantId, status])
+}
+
+model ChecklistTemplate {
+  id          String          @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  items       ChecklistItem[]
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+
+  @@unique([tenantId, name])
+}
+
+model ChecklistItem {
+  id         String            @id @default(cuid())
+  templateId String
+  title      String
+  order      Int
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id                  String              @id @default(cuid())
+  tenantId            String
+  jobId               String
+  title               String
+  status              TaskStatus          @default(PENDING)
+  assigneeId          String?
+  dueAt               DateTime?
+  checklistTemplateId String?
+  metadata            Json?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  assignee            User?               @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  checklistTemplate   ChecklistTemplate?  @relation(fields: [checklistTemplateId], references: [id])
+  job                 Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checklistItems      TaskChecklistItem[]
+
+  @@index([tenantId, status])
+}
+
+model TaskChecklistItem {
+  id           String    @id @default(cuid())
+  taskId       String
+  title        String
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  assignedToId String?
+  assignedTo   User?     @relation("TaskChecklistAssignment", fields: [assignedToId], references: [id])
+  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TimeEntry {
+  id        String    @id @default(cuid())
+  tenantId  String
+  jobId     String
+  userId    String
+  clockIn   DateTime
+  clockOut  DateTime?
+  gps       Json?
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MaterialUsage {
+  id        String   @id @default(cuid())
+  tenantId  String
+  jobId     String
+  sku       String
+  quantity  Decimal  @default(0) @db.Decimal(10, 2)
+  unitCost  Decimal  @default(0) @db.Decimal(12, 2)
+  notes     String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sku])
+}
+
+model Invoice {
+  id        String        @id @default(cuid())
+  tenantId  String
+  jobId     String?
+  number    String
+  status    InvoiceStatus @default(DRAFT)
+  dueAt     DateTime?
+  subtotal  Decimal       @default(0) @db.Decimal(12, 2)
+  tax       Decimal       @default(0) @db.Decimal(12, 2)
+  total     Decimal       @default(0) @db.Decimal(12, 2)
+  balance   Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  files     File[]
+  job       Job?          @relation(fields: [jobId], references: [id])
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments  Payment[]
+
+  @@unique([tenantId, number])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  amount      Decimal       @default(0) @db.Decimal(12, 2)
+  method      PaymentMethod
+  processorId String?
+  receivedAt  DateTime
+  metadata    Json?
+  createdAt   DateTime      @default(now())
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model File {
+  id           String    @id @default(cuid())
+  tenantId     String
+  jobId        String?
+  estimateId   String?
+  invoiceId    String?
+  url          String
+  type         FileType
+  uploadedById String?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+  estimate     Estimate? @relation(fields: [estimateId], references: [id])
+  invoice      Invoice?  @relation(fields: [invoiceId], references: [id])
+  job          Job?      @relation(fields: [jobId], references: [id])
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedBy   User?     @relation("FileUploader", fields: [uploadedById], references: [id])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  meta       Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("ActivityActor", fields: [actorId], references: [id])
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityType])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  tenantId  String
+  userId    String
+  channel   NotificationChannel
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SavedView {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  name      String
+  entity    String
+  filters   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserSavedViews", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, name, entity])
+}
+
+enum TenantPlan {
+  FREE
+  STANDARD
+  PRO
+  ENTERPRISE
+}
+
+enum RoleKey {
+  OWNER
+  ADMIN
+  OFFICE
+  CREW
+  PROPERTY_MANAGER
+  CLIENT
+}
+
+enum AuthProvider {
+  MAGIC_LINK
+  OAUTH
+  SSO
+}
+
+enum ContactType {
+  CLIENT
+  PROPERTY_MANAGER
+  VENDOR
+}
+
+enum LeadStage {
+  NEW
+  QUALIFIED
+  SCHEDULED_VISIT
+  WON
+  LOST
+}
+
+enum EstimateStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  ARCHIVED
+}
+
+enum JobStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+  CANCELED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETE
+  BLOCKED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentMethod {
+  CARD
+  ACH
+  CASH
+  CHECK
+  OTHER
+}
+
+enum FileType {
+  IMAGE
+  DOCUMENT
+  VIDEO
+  OTHER
+}
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+  SMS
+}

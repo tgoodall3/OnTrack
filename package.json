@@ -1,0 +1,30 @@
+{
+  "name": "ontrack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OnTrack multi-tenant contractor operations platform.",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "prepare": "husky install",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:web": "turbo run dev --parallel --filter @ontrack/web",
+    "dev:api": "turbo run dev --parallel --filter @ontrack/api",
+    "lint:web": "turbo run lint --filter @ontrack/web",
+    "lint:api": "turbo run lint --filter @ontrack/api",
+    "services:up": "docker compose -f infra/local/docker-compose.yml up -d",
+    "services:down": "docker compose -f infra/local/docker-compose.yml down",
+    "services:logs": "docker compose -f infra/local/docker-compose.yml logs -f"
+  },
+  "engines": {
+    "node": ">=20.14.0",
+    "pnpm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "turbo": "^2.5.8"
+  }
+}
