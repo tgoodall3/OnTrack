@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useTeamMembers, TeamMember } from "@/hooks/use-team-members";
 import { ChecklistTemplate, useChecklistTemplates } from "@/hooks/use-checklist-templates";
 import { JobActivityEntry, useJobActivity } from "@/hooks/use-job-activity";
+import { FilesSection } from "@/components/files/files-section";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -741,10 +742,18 @@ function WorkPageContent() {
                   className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/60"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-lg font-semibold text-foreground">
-                        {job.lead?.contactName ?? "Field assignment"}
-                      </p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-lg font-semibold text-foreground">
+                          {job.lead?.contactName ?? "Field assignment"}
+                        </p>
+                        {appliedTemplateMeta && (
+                          <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <ClipboardCheck className="h-3 w-3 text-primary" aria-hidden="true" />
+                            <span className="max-w-[180px] truncate">{appliedTemplateMeta.name}</span>
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {job.estimate?.number ?? "Unscheduled estimate"} - {job.lead?.stage.replace("_", " ") ?? "Lead"}
                       </p>
@@ -755,10 +764,27 @@ function WorkPageContent() {
                         </p>
                       )}
                       {appliedTemplateMeta && (
-                        <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          <ClipboardCheck className="h-3 w-3 text-primary" aria-hidden="true" />
-                          {appliedTemplateMeta.name}
-                        </span>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const shouldRemove = window.confirm(
+                                `Remove the "${appliedTemplateMeta.name}" checklist from this job? Template tasks will be deleted.`,
+                              );
+                              if (!shouldRemove) {
+                                return;
+                              }
+                              await handleRemoveTemplate(job.id, appliedTemplateMeta.id);
+                            }}
+                            disabled={applyingTemplateJobId === job.id}
+                            className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-accent underline-offset-4 hover:underline disabled:opacity-60"
+                          >
+                            {applyingTemplateJobId === job.id && removeTemplateMutation.isPending ? (
+                              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                            ) : null}
+                            Remove checklist
+                          </button>
+                        </div>
                       )}
                     </div>
                     <JobStatusSelect
@@ -818,6 +844,10 @@ function WorkPageContent() {
                   newTaskDueDate={newTaskDueDate}
                   onNewTaskDueDateChange={setNewTaskDueDate}
                   taskError={taskError}
+                />
+                <FilesSection
+                  scope={{ jobId: job.id }}
+                  entityLabel={job.lead?.contactName ?? job.property?.address ?? "Field assignment"}
                 />
               </article>
             );

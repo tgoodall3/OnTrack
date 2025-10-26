@@ -5,6 +5,9 @@ import { RequestContextService } from '../context/request-context.service';
 import { ListEstimatesDto } from './dto/list-estimates.dto';
 import { CreateEstimateDto } from './dto/create-estimate.dto';
 import { UpdateEstimateDto } from './dto/update-estimate.dto';
+import { SendEstimateDto } from './dto/send-estimate.dto';
+import { ApproveEstimateDto } from './dto/approve-estimate.dto';
+import { EstimateMailerService } from './estimate-mailer.service';
 
 type EstimateWithRelations = Prisma.EstimateGetPayload<{
   include: {
@@ -51,6 +54,8 @@ export interface EstimateSummary {
     total: number;
   }>;
   approvals: number;
+  latestApproval: EstimateApprovalSnapshot | null;
+  approvalHistory: EstimateApprovalSnapshot[];
   job?: {
     id: string;
     status: EstimateStatus | string;
@@ -58,11 +63,25 @@ export interface EstimateSummary {
   };
 }
 
+export interface EstimateApprovalSnapshot {
+  id: string;
+  status: EstimateStatus;
+  approvedAt?: string | null;
+  createdAt: string;
+  recipientEmail?: string | null;
+  recipientName?: string | null;
+  approverName?: string | null;
+  approverEmail?: string | null;
+  message?: string | null;
+  emailSubject?: string | null;
+}
+
 @Injectable()
 export class EstimatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
+    private readonly estimateMailer: EstimateMailerService,
   ) {}
 
   async list(params: ListEstimatesDto): Promise<EstimateSummary[]> {
@@ -305,7 +324,141 @@ export class EstimatesService {
     });
   }
 
+  async send(id: string, dto: SendEstimateDto): Promise<EstimateSummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const estimate = await this.prisma.estimate.findFirst({
+      where: { id, tenantId },
+      include: {
+        lead: {
+          select: {
+            id: true,
+            contact: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        lineItems: true,
+      },
+    });
+
+    if (!estimate) {
+      throw new BadRequestException('Estimate not found');
+    }
+
+    const emailResult = await this.estimateMailer.sendEstimateEmail(
+      {
+        id: estimate.id,
+        number: estimate.number,
+        status: estimate.status,
+        subtotal: estimate.subtotal,
+        tax: estimate.tax,
+        total: estimate.total,
+        lead: {
+          contact: {
+            name: estimate.lead.contact?.name ?? null,
+          },
+        },
+        lineItems: estimate.lineItems.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      },
+      dto,
+    );
+
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.estimate.update({
+        where: { id },
+        data: {
+          status: EstimateStatus.SENT,
+        },
+      });
+
+      await tx.estimateApproval.create({
+        data: {
+          estimateId: id,
+          status: EstimateStatus.SENT,
+          signature: {
+            event: 'sent',
+            recipientEmail: dto.recipientEmail,
+            recipientName: dto.recipientName ?? null,
+            message: dto.message ?? null,
+            subject: emailResult.subject,
+            htmlPreview: emailResult.htmlPreview,
+            sentAt: now.toISOString(),
+          } as Prisma.JsonObject,
+        },
+      });
+    });
+
+    await this.logLeadActivity(tenantId, estimate.lead.id, 'lead.estimate_sent', {
+      estimateId: id,
+      status: EstimateStatus.SENT,
+      recipientEmail: dto.recipientEmail,
+      subject: emailResult.subject,
+    });
+
+    return this.getSummaryById(id, tenantId);
+  }
+
+  async approve(id: string, dto: ApproveEstimateDto): Promise<EstimateSummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const estimate = await this.prisma.estimate.findFirst({
+      where: { id, tenantId },
+      include: {
+        lead: { select: { id: true } },
+      },
+    });
+
+    if (!estimate) {
+      throw new BadRequestException('Estimate not found');
+    }
+
+    const approvedAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.estimateApproval.create({
+        data: {
+          estimateId: id,
+          status: EstimateStatus.APPROVED,
+          approvedAt,
+          signature: {
+            event: 'approved',
+            approverName: dto.approverName,
+            approverEmail: dto.approverEmail ?? null,
+            signature: dto.signature ?? null,
+            approvedAt: approvedAt.toISOString(),
+          } as Prisma.JsonObject,
+        },
+      });
+
+      await tx.estimate.update({
+        where: { id },
+        data: {
+          status: EstimateStatus.APPROVED,
+        },
+      });
+    });
+
+    await this.logLeadActivity(tenantId, estimate.lead.id, 'lead.estimate_approved', {
+      estimateId: id,
+      status: EstimateStatus.APPROVED,
+      approverName: dto.approverName,
+      approverEmail: dto.approverEmail ?? null,
+    });
+
+    return this.getSummaryById(id, tenantId);
+  }
+
   private toSummary(estimate: EstimateWithRelations): EstimateSummary {
+    const approvalHistory = this.mapApprovals(estimate.approvals);
+    const latestApproval = approvalHistory.length > 0 ? approvalHistory[0] : null;
+
     return {
       id: estimate.id,
       number: estimate.number,
@@ -330,6 +483,8 @@ export class EstimatesService {
         total: Number(item.quantity) * Number(item.unitPrice),
       })),
       approvals: estimate.approvals.length,
+      latestApproval,
+      approvalHistory,
       job: estimate.job
         ? {
             id: estimate.job.id,
@@ -338,6 +493,108 @@ export class EstimatesService {
           }
         : undefined,
     };
+  }
+
+  private mapApprovals(
+    approvals: Prisma.EstimateApprovalGetPayload<Record<string, never>>[],
+  ): EstimateApprovalSnapshot[] {
+    return approvals
+      .map((approval) => {
+        const signature = this.toRecord(approval.signature);
+        const timestamp = this.resolveApprovalTimestamp(approval);
+        const createdAtIso = new Date(
+          timestamp || Date.now(),
+        ).toISOString();
+
+        return {
+          id: approval.id,
+          status: approval.status,
+          approvedAt: approval.approvedAt?.toISOString() ?? null,
+          createdAt: createdAtIso,
+          recipientEmail: signature?.recipientEmail
+            ? String(signature.recipientEmail)
+            : undefined,
+          recipientName: signature?.recipientName
+            ? String(signature.recipientName)
+            : undefined,
+          approverName: signature?.approverName
+            ? String(signature.approverName)
+            : undefined,
+          approverEmail: signature?.approverEmail
+            ? String(signature.approverEmail)
+            : undefined,
+          message: signature?.message ? String(signature.message) : undefined,
+          emailSubject: signature?.subject ? String(signature.subject) : undefined,
+        };
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+  }
+
+  private toRecord(
+    value: Prisma.JsonValue | null | undefined,
+  ): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private resolveApprovalTimestamp(
+    approval: Prisma.EstimateApprovalGetPayload<Record<string, never>>,
+  ): number {
+    if (approval.approvedAt) {
+      return approval.approvedAt.getTime();
+    }
+    const signature = this.toRecord(approval.signature);
+    if (signature?.sentAt) {
+      const parsed = Date.parse(String(signature.sentAt));
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    if (signature?.approvedAt) {
+      const parsed = Date.parse(String(signature.approvedAt));
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
+
+  private async getSummaryById(
+    id: string,
+    tenantId: string,
+  ): Promise<EstimateSummary> {
+    const estimate = await this.prisma.estimate.findFirst({
+      where: { id, tenantId },
+      include: {
+        lead: {
+          select: {
+            id: true,
+            stage: true,
+            contact: { select: { name: true } },
+          },
+        },
+        lineItems: true,
+        approvals: true,
+        job: {
+          select: {
+            id: true,
+            status: true,
+            scheduledStart: true,
+          },
+        },
+      },
+    });
+
+    if (!estimate) {
+      throw new BadRequestException('Estimate not found');
+    }
+
+    return this.toSummary(estimate);
   }
 
   private generateEstimateNumber(): string {
@@ -384,3 +641,4 @@ function calculateTotals(
     total: new Prisma.Decimal(total),
   };
 }
+

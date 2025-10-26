@@ -15,14 +15,14 @@
 
   /* Muted surfaces (lighter so dark text meets 4.5:1) */
   --ontrack-muted: #eaf2fb;        /* lighter than #d9e2ef */
-  --ontrack-muted-foreground: #0b2240; /* darker text for muted areas */
+  --ontrack-muted-foreground: #ffffff; /* darker text for muted areas */
 
   /* Cards + dividers */
   --ontrack-surface: #ffffff;
   --ontrack-border: #9fb4d1;       /* darker than before for 3:1 non-text contrast */
 
   /* Optional tonal ladder (useful for utilities) */
-  --ontrack-primary-900: #0b2238;
+  --ontrack-primary-900: #ffffff;
   --ontrack-primary-800: #0d2a46;
   --ontrack-primary-700: #0f3659;  /* == primary */
   --ontrack-primary-600: #184a78;

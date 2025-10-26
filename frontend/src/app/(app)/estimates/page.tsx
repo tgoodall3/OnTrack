@@ -12,6 +12,16 @@ const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
 
 type EstimateStatus = "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "EXPIRED" | "ARCHIVED";
 
+type EstimateApprovalEntry = {
+  id: string;
+  status: EstimateStatus;
+  createdAt: string;
+  approvedAt?: string | null;
+  recipientEmail?: string | null;
+  approverName?: string | null;
+  emailSubject?: string | null;
+};
+
 type EstimateSummary = {
   id: string;
   number: string;
@@ -36,6 +46,8 @@ type EstimateSummary = {
     total: number;
   }>;
   approvals: number;
+  latestApproval: EstimateApprovalEntry | null;
+  approvalHistory: EstimateApprovalEntry[];
   job?: {
     id: string;
     status: string;
@@ -451,3 +463,4 @@ function defaultStart() {
 function toDateTimeLocal(iso: string) {
   return iso.slice(0, 16);
 }
+

@@ -16,6 +16,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
 import { ChecklistsModule } from './checklists/checklists.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ChecklistsModule } from './checklists/checklists.module';
     TasksModule,
     UsersModule,
     ChecklistsModule,
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

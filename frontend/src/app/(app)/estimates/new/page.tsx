@@ -141,9 +141,9 @@ export default function NewEstimatePage() {
       toast({
         variant: "success",
         title: "Estimate created",
-        description: "You can now review or send the proposal.",
+        description: "Redirecting to the estimate details so you can review, send, or schedule it.",
       });
-      router.push(`/estimates?highlight=${estimate.id}`);
+      router.push(`/estimates/${estimate.id}`);
     },
     onError: (error) => {
       toast({

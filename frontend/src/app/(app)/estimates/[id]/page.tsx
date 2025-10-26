@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarClock, ClipboardList, Loader2, Timer } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { FilesSection } from "@/components/files/files-section";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -20,6 +21,19 @@ const STATUS_OPTIONS: Array<{ value: EstimateStatus; label: string }> = [
   { value: "EXPIRED", label: "Expired" },
   { value: "ARCHIVED", label: "Archived" },
 ];
+
+type EstimateApprovalEntry = {
+  id: string;
+  status: EstimateStatus;
+  createdAt: string;
+  approvedAt?: string | null;
+  recipientEmail?: string | null;
+  recipientName?: string | null;
+  approverName?: string | null;
+  approverEmail?: string | null;
+  message?: string | null;
+  emailSubject?: string | null;
+};
 
 type EstimateDetail = {
   id: string;
@@ -45,6 +59,8 @@ type EstimateDetail = {
     total: number;
   }>;
   approvals: number;
+  latestApproval: EstimateApprovalEntry | null;
+  approvalHistory: EstimateApprovalEntry[];
   job?: {
     id: string;
     status: string;
@@ -56,6 +72,18 @@ type ScheduleJobInput = {
   estimateId: string;
   scheduledStart?: string;
   scheduledEnd?: string;
+};
+
+type SendEstimateInput = {
+  recipientEmail: string;
+  recipientName?: string;
+  message?: string;
+};
+
+type ApproveEstimateInput = {
+  approverName: string;
+  approverEmail?: string;
+  signature?: string;
 };
 
 async function fetchEstimate(id: string): Promise<EstimateDetail> {
@@ -94,6 +122,40 @@ async function patchEstimateStatus(id: string, status: EstimateStatus) {
   return response.json() as Promise<EstimateDetail>;
 }
 
+async function sendEstimateRequest(id: string, payload: SendEstimateInput): Promise<EstimateDetail> {
+  const response = await fetch(`${API_BASE_URL}/estimates/${id}/send`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to send estimate (${response.status})`);
+  }
+
+  return response.json();
+}
+
+async function approveEstimateRequest(id: string, payload: ApproveEstimateInput): Promise<EstimateDetail> {
+  const response = await fetch(`${API_BASE_URL}/estimates/${id}/approve`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to approve estimate (${response.status})`);
+  }
+
+  return response.json();
+}
+
 async function scheduleJob(payload: ScheduleJobInput) {
   const response = await fetch(`${API_BASE_URL}/jobs`, {
     method: "POST",
@@ -120,6 +182,10 @@ export default function EstimateDetailPage() {
 
   const [jobForm, setJobForm] = useState({ start: "", end: "" });
   const [jobFormError, setJobFormError] = useState<string | null>(null);
+  const [sendForm, setSendForm] = useState({ email: "", name: "", message: "" });
+  const [sendFormError, setSendFormError] = useState<string | null>(null);
+  const [approveForm, setApproveForm] = useState({ name: "", email: "", signature: "" });
+  const [approveFormError, setApproveFormError] = useState<string | null>(null);
 
   const {
     data: estimate,
@@ -152,6 +218,49 @@ export default function EstimateDetailPage() {
     },
   });
 
+  const sendEstimateMutation = useMutation<EstimateDetail, Error, SendEstimateInput>({
+    mutationFn: (payload) => sendEstimateRequest(estimateId, payload),
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData(["estimates", estimateId], updated);
+      queryClient.invalidateQueries({ queryKey: ["estimates"] }).catch(() => {
+        // noop
+      });
+      setSendFormError(null);
+      setSendForm((prev) => ({ ...prev, message: "" }));
+      toast({
+        variant: "success",
+        title: "Estimate sent",
+        description: `Delivered to ${variables.recipientEmail}.`,
+      });
+    },
+    onError: (mutationError) => {
+      setSendFormError(mutationError.message);
+    },
+  });
+
+  const approveEstimateMutation = useMutation<EstimateDetail, Error, ApproveEstimateInput>({
+    mutationFn: (payload) => approveEstimateRequest(estimateId, payload),
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData(["estimates", estimateId], updated);
+      queryClient.invalidateQueries({ queryKey: ["estimates"] }).catch(() => {
+        // noop
+      });
+      setApproveFormError(null);
+      toast({
+        variant: "success",
+        title: "Estimate approved",
+        description: `Approved by ${variables.approverName}.`,
+      });
+      setJobForm((prev) => ({
+        ...prev,
+        start: prev.start || defaultJobStart(),
+      }));
+    },
+    onError: (mutationError) => {
+      setApproveFormError(mutationError.message);
+    },
+  });
+
   const scheduleJobMutation = useMutation<{ id: string }, Error, ScheduleJobInput>({
     mutationFn: scheduleJob,
     onSuccess: () => {
@@ -161,6 +270,8 @@ export default function EstimateDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["estimates"] }).catch(() => {
         // noop
       });
+      setJobForm({ start: "", end: "" });
+      setJobFormError(null);
       toast({
         variant: "success",
         title: "Job scheduled",
@@ -169,6 +280,7 @@ export default function EstimateDetailPage() {
       router.push("/work?status=SCHEDULED");
     },
     onError: (mutationError) => {
+      setJobFormError(mutationError.message);
       toast({
         variant: "destructive",
         title: "Failed to create job",
@@ -193,6 +305,43 @@ export default function EstimateDetailPage() {
     };
   }, [estimate]);
 
+  useEffect(() => {
+    if (!estimate) {
+      return;
+    }
+
+    if (estimate.status === "APPROVED" && !jobForm.start) {
+      setJobForm((prev) => ({
+        ...prev,
+        start: defaultJobStart(),
+      }));
+    }
+
+    if (
+      estimate.latestApproval?.status === "SENT" &&
+      !sendForm.email &&
+      estimate.latestApproval.recipientEmail
+    ) {
+      setSendForm((prev) => ({
+        ...prev,
+        email: estimate.latestApproval?.recipientEmail ?? prev.email,
+        name: estimate.latestApproval?.recipientName ?? prev.name,
+      }));
+    }
+
+    if (
+      estimate.latestApproval?.status === "APPROVED" &&
+      !approveForm.name &&
+      estimate.latestApproval.approverName
+    ) {
+      setApproveForm((prev) => ({
+        ...prev,
+        name: estimate.latestApproval?.approverName ?? prev.name,
+        email: estimate.latestApproval?.approverEmail ?? prev.email,
+      }));
+    }
+  }, [estimate, jobForm.start, sendForm.email, sendForm.name, approveForm.name, approveForm.email]);
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -216,6 +365,17 @@ export default function EstimateDetailPage() {
 
   const statusLabel = STATUS_OPTIONS.find((option) => option.value === estimate.status)?.label ?? estimate.status;
   const allowJobScheduling = estimate.status === "APPROVED" && !estimate.job;
+  const approvalHistory = estimate.approvalHistory ?? [];
+  const latestSend = estimate.latestApproval?.status === "SENT" ? estimate.latestApproval : null;
+  const latestApprovalRecord = estimate.latestApproval?.status === "APPROVED" ? estimate.latestApproval : null;
+  const sendButtonLabel = sendEstimateMutation.isPending
+    ? "Sending..."
+    : latestSend
+      ? "Resend estimate"
+      : "Send estimate";
+  const sendDisabled = sendEstimateMutation.isPending || !sendForm.email.trim();
+  const approveButtonLabel = approveEstimateMutation.isPending ? "Recording..." : "Record approval";
+  const approveDisabled = approveEstimateMutation.isPending || !approveForm.name.trim();
 
   return (
     <div className="space-y-6">
@@ -305,6 +465,12 @@ export default function EstimateDetailPage() {
             <h3 className="text-sm font-semibold text-foreground">Notes</h3>
             <p className="mt-1">{estimate.notes?.length ? estimate.notes : "No notes captured."}</p>
           </div>
+
+          <FilesSection
+            scope={{ estimateId: estimate.id }}
+            entityLabel={`Estimate ${estimate.number}`}
+            emptyState="No files yet. Upload supporting documents for this estimate."
+          />
         </div>
 
         <aside className="space-y-4">
@@ -316,6 +482,154 @@ export default function EstimateDetailPage() {
               <SnapshotRow icon={<CalendarClock className="h-4 w-4 text-primary" />} label="Expires" value={estimate.expiresAt ? formatDate(estimate.expiresAt) : "Not set"} />
             </div>
           </div>
+
+          <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+            <h3 className="text-sm font-semibold text-foreground">Customer delivery</h3>
+            {latestSend ? (
+              <p className="text-xs text-muted-foreground">
+                Last sent to {latestSend.recipientEmail ?? "the customer"} on {formatDate(latestSend.createdAt)}.
+              </p>
+            ) : (
+              <p className="text-xs">
+                Email the estimate to the customer when you are ready to review or request approval.
+              </p>
+            )}
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!sendForm.email.trim()) {
+                  setSendFormError("Recipient email is required.");
+                  return;
+                }
+                setSendFormError(null);
+                sendEstimateMutation.mutate({
+                  recipientEmail: sendForm.email.trim(),
+                  recipientName: sendForm.name.trim() ? sendForm.name.trim() : undefined,
+                  message: sendForm.message.trim() ? sendForm.message.trim() : undefined,
+                });
+              }}
+              className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-3 py-3"
+            >
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                Recipient email
+                <input
+                  type="email"
+                  value={sendForm.email}
+                  onChange={(event) => setSendForm((prev) => ({ ...prev, email: event.target.value }))}
+                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                  required
+                  disabled={sendEstimateMutation.isPending}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                Customer name
+                <input
+                  type="text"
+                  value={sendForm.name}
+                  onChange={(event) => setSendForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                  disabled={sendEstimateMutation.isPending}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                Message
+                <textarea
+                  value={sendForm.message}
+                  onChange={(event) => setSendForm((prev) => ({ ...prev, message: event.target.value }))}
+                  rows={3}
+                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                  placeholder="Optional note to include with the proposal"
+                  disabled={sendEstimateMutation.isPending}
+                />
+              </label>
+              {sendFormError && <p className="text-xs text-accent">{sendFormError}</p>}
+              <button
+                type="submit"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                disabled={sendDisabled}
+              >
+                {sendEstimateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                {sendButtonLabel}
+              </button>
+            </form>
+          </div>
+
+          <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+            <h3 className="text-sm font-semibold text-foreground">Approval</h3>
+            {estimate.status === "APPROVED" ? (
+              <div className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
+                <p className="font-semibold text-foreground">
+                  Approved{latestApprovalRecord?.approverName ? ` by ${latestApprovalRecord.approverName}` : ""}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {latestApprovalRecord?.approvedAt
+                    ? `Recorded on ${formatDate(latestApprovalRecord.approvedAt)}`
+                    : `Recorded ${formatDate(latestApprovalRecord?.createdAt ?? estimate.updatedAt)}`}
+                </p>
+              </div>
+            ) : (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!approveForm.name.trim()) {
+                    setApproveFormError("Approver name is required.");
+                    return;
+                  }
+                  setApproveFormError(null);
+                  approveEstimateMutation.mutate({
+                    approverName: approveForm.name.trim(),
+                    approverEmail: approveForm.email.trim() ? approveForm.email.trim() : undefined,
+                    signature: approveForm.signature.trim() ? approveForm.signature.trim() : undefined,
+                  });
+                }}
+                className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-3 py-3"
+              >
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                  Approver name
+                  <input
+                    type="text"
+                    value={approveForm.name}
+                    onChange={(event) => setApproveForm((prev) => ({ ...prev, name: event.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                    required
+                    disabled={approveEstimateMutation.isPending}
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                  Approver email
+                  <input
+                    type="email"
+                    value={approveForm.email}
+                    onChange={(event) => setApproveForm((prev) => ({ ...prev, email: event.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                    disabled={approveEstimateMutation.isPending}
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                  Signature / note
+                  <textarea
+                    value={approveForm.signature}
+                    onChange={(event) => setApproveForm((prev) => ({ ...prev, signature: event.target.value }))}
+                    rows={3}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                    placeholder="Optional signature information"
+                    disabled={approveEstimateMutation.isPending}
+                  />
+                </label>
+                {approveFormError && <p className="text-xs text-accent">{approveFormError}</p>}
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                  disabled={approveDisabled}
+                >
+                  {approveEstimateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                  {approveButtonLabel}
+                </button>
+              </form>
+            )}
+          </div>
+
+          <ApprovalHistoryCard entries={approvalHistory} />
 
           <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Job conversion</h3>
@@ -338,15 +652,6 @@ export default function EstimateDetailPage() {
                 <p>
                   Once the estimate is approved, schedule the crew and automatically create the work order.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => updateStatusMutation.mutate("APPROVED")}
-                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
-                  disabled={estimate.status === "APPROVED" || updateStatusMutation.isPending}
-                >
-                  Mark as approved
-                </button>
-
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
@@ -426,9 +731,87 @@ function formatDate(iso: string) {
   }).format(new Date(iso));
 }
 
+function defaultJobStart(): string {
+  const date = new Date();
+  date.setMinutes(0, 0, 0);
+  return date.toISOString().slice(0, 16);
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
   }).format(value);
+}
+
+function formatRelativeTimeFromNow(iso: string) {
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) {
+    return formatDate(iso);
+  }
+  const now = Date.now();
+  const diff = target - now;
+  const seconds = Math.round(diff / 1000);
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.round(minutes / 60);
+  const days = Math.round(hours / 24);
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+  if (Math.abs(seconds) < 60) {
+    return rtf.format(Math.trunc(seconds), "second");
+  }
+  if (Math.abs(minutes) < 60) {
+    return rtf.format(Math.trunc(minutes), "minute");
+  }
+  if (Math.abs(hours) < 24) {
+    return rtf.format(Math.trunc(hours), "hour");
+  }
+  if (Math.abs(days) < 7) {
+    return rtf.format(Math.trunc(days), "day");
+  }
+
+  return formatDate(iso);
+}
+
+function ApprovalHistoryCard({ entries }: { entries: EstimateApprovalEntry[] }) {
+  return (
+    <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+      <h3 className="text-sm font-semibold text-foreground">Delivery & approvals</h3>
+      {entries.length === 0 ? (
+        <p className="text-xs text-muted-foreground/80">No delivery history yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {entries.map((entry) => (
+            <li key={entry.id} className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
+              <p className="font-semibold text-foreground">{describeApprovalEntry(entry)}</p>
+              <p className="text-xs text-muted-foreground/80">
+                {formatRelativeTimeFromNow(entry.createdAt)}
+                {entry.emailSubject ? ` • ${entry.emailSubject}` : ""}
+              </p>
+              {entry.message && (
+                <p className="mt-1 text-xs text-muted-foreground/70">{entry.message}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function describeApprovalEntry(entry: EstimateApprovalEntry): string {
+  switch (entry.status) {
+    case "SENT": {
+      const recipient =
+        entry.recipientName ?? entry.recipientEmail ?? "customer";
+      return `Sent to ${recipient}`;
+    }
+    case "APPROVED": {
+      const approver =
+        entry.approverName ?? entry.approverEmail ?? "customer";
+      return `Approved by ${approver}`;
+    }
+    default:
+      return `Status updated to ${entry.status.replace("_", " ").toLowerCase()}`;
+  }
 }

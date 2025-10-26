@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarClock, ClipboardList, Loader2, MapPin, Plus, Share2, Users } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -54,6 +54,8 @@ const ACTIVITY_LABELS: Record<string, string> = {
   'lead.estimate_created': 'Estimate created',
   'lead.estimate_status_updated': 'Estimate status updated',
   'lead.estimate_updated': 'Estimate updated',
+  'lead.estimate_sent': 'Estimate sent',
+  'lead.estimate_approved': 'Estimate approved',
   'lead.job_created': 'Job created',
   'lead.deleted': 'Lead deleted',
 };
@@ -124,6 +126,7 @@ async function fetchLeadActivity(id: string): Promise<LeadActivityEntry[]> {
 
 export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const leadId = params.id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -415,7 +418,7 @@ export default function LeadDetailPage() {
             label="Estimates created"
             value={data.metrics.estimates}
             ctaLabel="New estimate"
-            href={`/estimates/new?leadId=${leadId}`}
+            onClick={() => router.push(`/estimates/new?leadId=${leadId}`)}
           />
           <SummaryCard
             label="Jobs scheduled"
@@ -430,13 +433,14 @@ export default function LeadDetailPage() {
         <section className="rounded-3xl border border-border/60 bg-surface p-6 shadow-sm shadow-primary/5">
           <header className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">Engagement summary</h2>
-            <Link
-              href={`/estimates/new?leadId=${leadId}`}
+            <button
+              type="button"
+              onClick={() => router.push(`/estimates/new?leadId=${leadId}`)}
               className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
             >
               <Plus className="h-4 w-4" />
               Create estimate
-            </Link>
+            </button>
           </header>
 
           <dl className="space-y-3 text-sm text-muted-foreground">
@@ -585,24 +589,32 @@ function SummaryCard({
   value,
   ctaLabel,
   href,
+  onClick,
 }: {
   label: string;
   value: number;
   ctaLabel: string;
-  href: string;
+  href?: string;
+  onClick?: () => void;
 }) {
+  const actionClasses =
+    "mt-3 inline-flex items-center text-xs font-semibold text-primary underline-offset-4 hover:underline";
+
   return (
     <div className="flex flex-col justify-between rounded-3xl border border-border/70 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
       <div>
         <p className="text-xs uppercase tracking-wide">{label}</p>
         <p className="text-2xl font-semibold text-foreground">{value}</p>
       </div>
-      <Link
-        href={href}
-        className="mt-3 inline-flex items-center text-xs font-semibold text-primary underline-offset-4 hover:underline"
-      >
-        {ctaLabel}
-      </Link>
+      {href ? (
+        <Link href={href} className={actionClasses}>
+          {ctaLabel}
+        </Link>
+      ) : (
+        <button type="button" onClick={onClick} className={actionClasses}>
+          {ctaLabel}
+        </button>
+      )}
     </div>
   );
 }
