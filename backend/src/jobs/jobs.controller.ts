@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { JobsService, JobSummary } from './jobs.service';
+import { JobActivityEntry, JobsService, JobSummary } from './jobs.service';
 import { ListJobsDto } from './dto/list-jobs.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
@@ -46,5 +46,10 @@ export class JobsController {
   @Delete(':id')
   async remove(@Param('id') id: string): Promise<void> {
     await this.jobsService.remove(id);
+  }
+
+  @Get(':id/activity')
+  async activity(@Param('id') id: string): Promise<JobActivityEntry[]> {
+    return this.jobsService.activity(id);
   }
 }

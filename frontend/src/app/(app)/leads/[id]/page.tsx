@@ -415,7 +415,7 @@ export default function LeadDetailPage() {
             label="Estimates created"
             value={data.metrics.estimates}
             ctaLabel="New estimate"
-            href={`/estimates?leadId=${leadId}`}
+            href={`/estimates/new?leadId=${leadId}`}
           />
           <SummaryCard
             label="Jobs scheduled"
@@ -431,7 +431,7 @@ export default function LeadDetailPage() {
           <header className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">Engagement summary</h2>
             <Link
-              href={`/estimates?leadId=${leadId}`}
+              href={`/estimates/new?leadId=${leadId}`}
               className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
             >
               <Plus className="h-4 w-4" />

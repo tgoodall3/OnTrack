@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { CalendarClock, ClipboardCheck, Loader2 } from "lucide-react";
+import { CalendarClock, ClipboardCheck, Loader2, Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -89,6 +90,8 @@ async function createJob(payload: ScheduleJobInput): Promise<CreatedJob> {
 
 export default function EstimatesPage() {
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight") ?? "";
   const [jobForm, setJobForm] = useState<{
     estimateId: string;
     start: string;
@@ -236,9 +239,18 @@ export default function EstimatesPage() {
             Track proposals, approvals, and conversion to jobs across your pipeline.
           </p>
         </div>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <ClipboardCheck className="h-4 w-4 text-primary" />
-          {estimates.length} estimates
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold">
+            <ClipboardCheck className="h-4 w-4 text-primary" />
+            {estimates.length} estimates
+          </span>
+          <Link
+            href="/estimates/new"
+            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+          >
+            <Plus className="h-3 w-3" aria-hidden="true" />
+            New estimate
+          </Link>
         </div>
       </header>
 
@@ -259,11 +271,15 @@ export default function EstimatesPage() {
         </div>
       ) : (
         <section className="space-y-4">
-          {estimates.map((estimate) => (
-            <article
-              key={estimate.id}
-              className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/60"
-            >
+          {estimates.map((estimate) => {
+            const isHighlighted = highlightId && estimate.id === highlightId;
+            return (
+              <article
+                key={estimate.id}
+                className={`rounded-3xl border bg-surface p-6 shadow-md transition ${
+                  isHighlighted ? "border-primary shadow-primary/20" : "border-border hover:border-primary/60"
+                }`}
+              >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-lg font-semibold text-foreground">
@@ -378,8 +394,9 @@ export default function EstimatesPage() {
                    </>
                  )}
               </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </section>
       )}
     </div>

@@ -57,6 +57,18 @@ export interface JobSummary {
   };
 }
 
+export interface JobActivityEntry {
+  id: string;
+  action: string;
+  createdAt: string;
+  actor?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  };
+  meta?: Prisma.JsonValue | null;
+}
+
 @Injectable()
 export class JobsService {
   constructor(
@@ -290,6 +302,42 @@ export class JobsService {
     await this.prisma.job.delete({
       where: { id },
     });
+  }
+
+  async activity(id: string): Promise<JobActivityEntry[]> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const logs = await this.prisma.activityLog.findMany({
+      where: {
+        tenantId,
+        entityType: 'job',
+        entityId: id,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+      include: {
+        actor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return logs.map((log) => ({
+      id: log.id,
+      action: log.action,
+      createdAt: log.createdAt.toISOString(),
+      actor: log.actor
+        ? {
+            id: log.actor.id,
+            name: log.actor.name,
+            email: log.actor.email,
+          }
+        : undefined,
+      meta: log.meta ?? null,
+    }));
   }
 
   private async logLeadActivity(

@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MapPin, Timer, Plus, CheckCircle2, Circle, ClipboardCheck } from "lucide-react";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Loader2, MapPin, Timer, Plus, CheckCircle2, Circle, ClipboardCheck, History } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
 import { useTeamMembers, TeamMember } from "@/hooks/use-team-members";
 import { ChecklistTemplate, useChecklistTemplates } from "@/hooks/use-checklist-templates";
+import { JobActivityEntry, useJobActivity } from "@/hooks/use-job-activity";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -77,6 +78,12 @@ type UpdateJobStatusInput = {
   status: JobStatus;
   actualStart?: string | null;
   actualEnd?: string | null;
+};
+
+type RemoveTemplateInput = {
+  jobId: string;
+  templateId: string;
+  suppressToast?: boolean;
 };
 
 const JOB_STATUS_LABELS: Record<JobStatus, string> = {
@@ -270,6 +277,29 @@ function WorkPageContent() {
   const checklistTemplates = checklistTemplatesData ?? [];
 
   const [applyingTemplateJobId, setApplyingTemplateJobId] = useState<string | null>(null);
+  const [jobTemplateById, setJobTemplateById] = useState<Record<string, { id: string; name: string }>>({});
+
+  const handleTemplateResolved = useCallback((jobId: string, template: ChecklistTemplate | null) => {
+    setJobTemplateById((current) => {
+      const nextValue = template ? { id: template.id, name: template.name } : undefined;
+      const existing = current[jobId];
+      const isUnchanged =
+        (existing === undefined && nextValue === undefined) ||
+        (existing !== undefined && nextValue !== undefined && existing.id === nextValue.id && existing.name === nextValue.name);
+
+      if (isUnchanged) {
+        return current;
+      }
+
+      const next = { ...current };
+      if (nextValue) {
+        next[jobId] = nextValue;
+      } else {
+        delete next[jobId];
+      }
+      return next;
+    });
+  }, []);
 
 
   const createTaskMutation = useMutation<TaskSummary, Error, CreateTaskInput, { previousTasks?: TaskSummary[]; key: TaskQueryKey; optimisticId: string }>({
@@ -489,7 +519,7 @@ function WorkPageContent() {
     },
   });
 
-  const applyTemplateMutation = useMutation<void, Error, { jobId: string; templateId: string }, { jobId: string }>({
+  const applyTemplateMutation = useMutation<void, Error, { jobId: string; templateId: string }>({
     mutationFn: async ({ jobId, templateId }) => {
       const response = await fetch(`${API_BASE_URL}/checklists/templates/${templateId}/apply`, {
         method: "POST",
@@ -504,10 +534,6 @@ function WorkPageContent() {
         throw new Error(`Failed to apply template (${response.status})`);
       }
     },
-    onMutate: async ({ jobId }) => {
-      setApplyingTemplateJobId(jobId);
-      return { jobId };
-    },
     onError: (mutationError) => {
       toast({
         variant: "destructive",
@@ -515,19 +541,49 @@ function WorkPageContent() {
         description: mutationError.message,
       });
     },
-    onSuccess: (_result, _variables, context) => {
+    onSuccess: (_result, variables) => {
       toast({
         variant: "success",
         title: "Checklist added",
         description: "Tasks loaded from template.",
       });
-      if (context?.jobId) {
-        void queryClient.invalidateQueries({ queryKey: ["jobs", context.jobId, "tasks"] });
-      }
+      void queryClient.invalidateQueries({ queryKey: ["jobs", variables.jobId, "tasks"] });
       void queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
-    onSettled: () => {
-      setApplyingTemplateJobId(null);
+  });
+
+  const removeTemplateMutation = useMutation<void, Error, RemoveTemplateInput>({
+    mutationFn: async ({ jobId, templateId }) => {
+      const response = await fetch(`${API_BASE_URL}/checklists/templates/${templateId}/apply`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+        body: JSON.stringify({ jobId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to remove template (${response.status})`);
+      }
+    },
+    onError: (mutationError) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to remove checklist",
+        description: mutationError.message,
+      });
+    },
+    onSuccess: (_result, variables) => {
+      if (!variables.suppressToast) {
+        toast({
+          variant: "success",
+          title: "Checklist removed",
+          description: "Template tasks cleared from job.",
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["jobs", variables.jobId, "tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
   });
 
@@ -590,7 +646,11 @@ function WorkPageContent() {
     updateJobStatusMutation.mutate(payload);
   };
 
-  const handleApplyTemplate = (jobId: string, templateId: string): boolean => {
+  const handleApplyTemplate = async (
+    jobId: string,
+    templateId: string,
+    options?: { replaceTemplateId?: string },
+  ): Promise<boolean> => {
     if (!templateId) {
       toast({
         variant: "destructive",
@@ -600,8 +660,37 @@ function WorkPageContent() {
       return false;
     }
 
-    applyTemplateMutation.mutate({ jobId, templateId });
-    return true;
+    setApplyingTemplateJobId(jobId);
+
+    try {
+      if (options?.replaceTemplateId) {
+        await removeTemplateMutation.mutateAsync({
+          jobId,
+          templateId: options.replaceTemplateId,
+          suppressToast: true,
+        });
+      }
+
+      await applyTemplateMutation.mutateAsync({ jobId, templateId });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setApplyingTemplateJobId(null);
+    }
+  };
+
+  const handleRemoveTemplate = async (jobId: string, templateId: string): Promise<boolean> => {
+    setApplyingTemplateJobId(jobId);
+
+    try {
+      await removeTemplateMutation.mutateAsync({ jobId, templateId });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setApplyingTemplateJobId(null);
+    }
   };
 
   return (
@@ -644,39 +733,47 @@ function WorkPageContent() {
           />
 
           {hasFilteredJobs ? (
-            filteredJobs.map((job) => (
-              <article
-                key={job.id}
-                className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/60"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-lg font-semibold text-foreground">
-                      {job.lead?.contactName ?? "Field assignment"}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {job.estimate?.number ?? "Unscheduled estimate"} - {job.lead?.stage.replace("_", " ") ?? "Lead"}
-                    </p>
-                    {job.property && (
-                      <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
-                        <MapPin className="h-4 w-4 text-primary" />
-                        {job.property.address}
+            filteredJobs.map((job) => {
+              const appliedTemplateMeta = jobTemplateById[job.id];
+              return (
+                <article
+                  key={job.id}
+                  className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/60"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-lg font-semibold text-foreground">
+                        {job.lead?.contactName ?? "Field assignment"}
                       </p>
-                    )}
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {job.estimate?.number ?? "Unscheduled estimate"} - {job.lead?.stage.replace("_", " ") ?? "Lead"}
+                      </p>
+                      {job.property && (
+                        <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
+                          <MapPin className="h-4 w-4 text-primary" />
+                          {job.property.address}
+                        </p>
+                      )}
+                      {appliedTemplateMeta && (
+                        <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <ClipboardCheck className="h-3 w-3 text-primary" aria-hidden="true" />
+                          {appliedTemplateMeta.name}
+                        </span>
+                      )}
+                    </div>
+                    <JobStatusSelect
+                      value={job.status}
+                      disabled={statusUpdatingId === job.id && updateJobStatusMutation.isPending}
+                      onChange={(nextStatus) => handleJobStatusChange(job, nextStatus)}
+                    />
                   </div>
-                  <JobStatusSelect
-                    value={job.status}
-                    disabled={statusUpdatingId === job.id && updateJobStatusMutation.isPending}
-                    onChange={(nextStatus) => handleJobStatusChange(job, nextStatus)}
-                  />
-                </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <StatusCard
                     label="Scheduled"
                     value={formatDateRange(job.scheduledStart, job.scheduledEnd) ?? "Pending"}
                   />
                   <StatusCard label="Actual" value={formatDateRange(job.actualStart, job.actualEnd) ?? "Not started"} />
-                  <StatusCard label="Estimate" value={job.estimate?.status ?? "—"} />
+                  <StatusCard label="Estimate" value={job.estimate?.status ?? "Unknown"} />
                 </div>
                 {job.notes && (
                   <p className="mt-4 rounded-2xl bg-muted/40 px-4 py-3 text-sm text-muted-foreground">{job.notes}</p>
@@ -687,7 +784,9 @@ function WorkPageContent() {
                   templatesLoading={checklistTemplatesLoading}
                   templatesError={checklistTemplatesError ?? null}
                   applyingTemplateJobId={applyingTemplateJobId}
-                  onApplyTemplate={(templateId) => handleApplyTemplate(job.id, templateId)}
+                  onApplyTemplate={(templateId, options) => handleApplyTemplate(job.id, templateId, options)}
+                  onRemoveTemplate={(templateId) => handleRemoveTemplate(job.id, templateId)}
+                  onTemplateDetected={handleTemplateResolved}
                   teamMembers={teamMembers}
                   teamMembersLoading={teamMembersLoading}
                   teamMembersError={teamMembersError?.message ?? null}
@@ -721,7 +820,8 @@ function WorkPageContent() {
                   taskError={taskError}
                 />
               </article>
-            ))
+            );
+          })
           ) : (
             <div className="rounded-3xl border border-dashed border-border/70 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
               No jobs in this status yet. Adjust the filters to see other assignments.
@@ -854,7 +954,14 @@ function JobTasksSection(props: {
   templatesLoading: boolean;
   templatesError: Error | null | undefined;
   applyingTemplateJobId: string | null;
-  onApplyTemplate: (templateId: string) => boolean;
+  onApplyTemplate: (
+    templateId: string,
+    options?: {
+      replaceTemplateId?: string;
+    },
+  ) => Promise<boolean>;
+  onRemoveTemplate: (templateId: string) => Promise<boolean>;
+  onTemplateDetected: (jobId: string, template: ChecklistTemplate | null) => void;
   onCreateTask: (input: CreateTaskInput) => void;
   onUpdateTask: (input: UpdateTaskInput) => void;
   onDeleteTask: (input: { jobId: string; taskId: string }) => void;
@@ -870,6 +977,8 @@ function JobTasksSection(props: {
   onNewTaskDueDateChange: (value: string) => void;
   taskError: string | null;
 }) {
+  const { toast: taskToast } = useToast();
+
   const {
     jobId,
     teamMembers,
@@ -880,6 +989,8 @@ function JobTasksSection(props: {
     templatesError,
     applyingTemplateJobId,
     onApplyTemplate,
+    onRemoveTemplate,
+    onTemplateDetected,
     onCreateTask,
     onUpdateTask,
     onDeleteTask,
@@ -897,6 +1008,14 @@ function JobTasksSection(props: {
   } = props;
 
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [showActivityFeed, setShowActivityFeed] = useState(false);
+
+  const {
+    data: jobActivityEntries,
+    isLoading: jobActivityLoading,
+    error: jobActivityError,
+    refetch: refetchJobActivity,
+  } = useJobActivity(showActivityFeed ? jobId : null, showActivityFeed);
 
   useEffect(() => {
     setSelectedTemplateId("");
@@ -908,6 +1027,19 @@ function JobTasksSection(props: {
   });
 
   const taskList = tasks ?? [];
+
+  const appliedTemplateId = useMemo(() => {
+    const jobTaskWithTemplate = taskList.find((task) => task.checklistTemplateId);
+    return jobTaskWithTemplate?.checklistTemplateId ?? null;
+  }, [taskList]);
+
+  const appliedTemplate = appliedTemplateId
+    ? templates.find((template) => template.id === appliedTemplateId)
+    : undefined;
+
+  useEffect(() => {
+    onTemplateDetected(jobId, appliedTemplate ?? null);
+  }, [appliedTemplate, jobId, onTemplateDetected]);
 
   const pendingTasks = useMemo(
     () => taskList.filter((task) => task.status !== "COMPLETE"),
@@ -953,6 +1085,31 @@ function JobTasksSection(props: {
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide">
         <span>Tasks</span>
         <div className="flex flex-wrap items-center gap-2">
+          {appliedTemplate && (
+            <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <ClipboardCheck className="h-3 w-3 text-primary" aria-hidden="true" />
+              <span>{appliedTemplate.name}</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  const confirmed = window.confirm(
+                    "Remove the current checklist? All template tasks for this job will be deleted.",
+                  );
+                  if (!confirmed) {
+                    return;
+                  }
+                  const removed = await onRemoveTemplate(appliedTemplate.id);
+                  if (removed) {
+                    setSelectedTemplateId("");
+                  }
+                }}
+                disabled={applyingTemplateJobId === jobId}
+                className="rounded-full border border-transparent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent transition hover:text-accent/80 disabled:opacity-60"
+              >
+                Remove
+              </button>
+            </div>
+          )}
           {templatesError && (
             <span className="text-[10px] text-accent">{templatesError.message}</span>
           )}
@@ -965,7 +1122,7 @@ function JobTasksSection(props: {
                 onChange={(event) => setSelectedTemplateId(event.target.value)}
                 className="min-w-[150px] rounded-full border border-border bg-background px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
               >
-                <option value="">Apply template…</option>
+                <option value="">Apply template...</option>
                 {templates.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.name}
@@ -974,8 +1131,39 @@ function JobTasksSection(props: {
               </select>
               <button
                 type="button"
-                onClick={() => {
-                  const applied = onApplyTemplate(selectedTemplateId);
+                onClick={async () => {
+                  if (!selectedTemplateId) {
+                    return;
+                  }
+                  if (appliedTemplateId && selectedTemplateId === appliedTemplateId) {
+                    taskToast({
+                      variant: "destructive",
+                      title: "Template already applied",
+                      description: "Choose a different template to replace the existing checklist.",
+                    });
+                    return;
+                  }
+
+                  const templateToApply = templates.find((template) => template.id === selectedTemplateId);
+                  let replaceTemplateId: string | undefined;
+
+                  if (appliedTemplate && selectedTemplateId !== appliedTemplate.id) {
+                    const confirmed = window.confirm(
+                      `Replace "${appliedTemplate.name}" with "${templateToApply?.name ?? "selected template"}"? Existing template tasks will be removed.`,
+                    );
+
+                    if (!confirmed) {
+                      return;
+                    }
+
+                    replaceTemplateId = appliedTemplate.id;
+                  }
+
+                  const applied = await onApplyTemplate(
+                    selectedTemplateId,
+                    replaceTemplateId ? { replaceTemplateId } : undefined,
+                  );
+
                   if (applied) {
                     setSelectedTemplateId("");
                   }
@@ -983,7 +1171,8 @@ function JobTasksSection(props: {
                 disabled={
                   !selectedTemplateId ||
                   applyingTemplateJobId === jobId ||
-                  templatesLoading
+                  templatesLoading ||
+                  (!!appliedTemplateId && selectedTemplateId === appliedTemplateId)
                 }
                 className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
               >
@@ -996,6 +1185,20 @@ function JobTasksSection(props: {
               </button>
             </div>
           ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !showActivityFeed;
+              setShowActivityFeed(next);
+              if (next) {
+                void refetchJobActivity();
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
+          >
+            <History className="h-3 w-3" aria-hidden="true" />
+            {showActivityFeed ? "Hide activity" : "View activity"}
+          </button>
           <button
             type="button"
             onClick={openCreateTask}
@@ -1066,6 +1269,14 @@ function JobTasksSection(props: {
             </div>
           )}
         </div>
+      )}
+
+      {showActivityFeed && (
+        <JobActivityStream
+          entries={jobActivityEntries ?? []}
+          loading={jobActivityLoading}
+          error={jobActivityError?.message ?? null}
+        />
       )}
 
       {creatingForJob === jobId && (
@@ -1227,6 +1438,43 @@ function toIsoDateFromInput(value: string): string {
   return new Date(`${value}T00:00:00Z`).toISOString();
 }
 
+function JobActivityStream({
+  entries,
+  loading,
+  error,
+}: {
+  entries: JobActivityEntry[];
+  loading: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="mt-4 space-y-2 rounded-2xl border border-border/60 bg-background/40 p-3 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold uppercase tracking-wide text-muted-foreground/80">Recent activity</span>
+        {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}
+      </div>
+      {error ? (
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-[11px] text-accent-foreground">
+          {error}
+        </div>
+      ) : entries.length === 0 ? (
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70">No activity yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {entries.map((entry) => (
+            <li key={entry.id} className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2">
+              <p className="font-semibold text-foreground">{describeJobActivity(entry)}</p>
+              <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">
+                {formatActor(entry)} • {formatRelativeTimeFromNow(entry.createdAt)}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function formatTeamMemberLabel(member: TeamMember): string {
   const base = member.name && member.name.trim().length > 0 ? member.name : member.email;
   const primaryRole = member.roles.find((role) => role?.name)?.name;
@@ -1240,4 +1488,83 @@ function toTaskAssignee(member?: TeamMember): TaskSummary["assignee"] | undefine
     name: member.name ?? undefined,
     email: member.email,
   };
+}
+
+function describeJobActivity(entry: JobActivityEntry): string {
+  const meta = toRecord(entry.meta);
+  switch (entry.action) {
+    case "job.checklist_template_applied":
+      return `Checklist "${meta?.templateName ?? fallbackTemplateLabel(meta)}" applied`;
+    case "job.checklist_template_removed":
+      return `Checklist "${meta?.templateName ?? fallbackTemplateLabel(meta)}" removed`;
+    default:
+      return entry.action
+        .split(/[._]/)
+        .filter((segment) => segment.length > 0)
+        .map(capitalize)
+        .join(" ");
+  }
+}
+
+function fallbackTemplateLabel(meta: Record<string, unknown> | null): string {
+  if (!meta) return "Template";
+  const id = typeof meta.templateId === "string" ? meta.templateId : null;
+  return id ? `(${id})` : "Template";
+}
+
+function capitalize(value: string): string {
+  if (!value) {
+    return value;
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatActor(entry: JobActivityEntry): string {
+  return entry.actor?.name ?? entry.actor?.email ?? "System";
+}
+
+function formatRelativeTimeFromNow(iso: string): string {
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+    }).format(new Date());
+  }
+  const now = Date.now();
+  const diff = target - now;
+  const seconds = Math.round(diff / 1000);
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.round(minutes / 60);
+  const days = Math.round(hours / 24);
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+  if (Math.abs(seconds) < 60) {
+    return rtf.format(Math.trunc(seconds), "second");
+  }
+  if (Math.abs(minutes) < 60) {
+    return rtf.format(Math.trunc(minutes), "minute");
+  }
+  if (Math.abs(hours) < 24) {
+    return rtf.format(Math.trunc(hours), "hour");
+  }
+  if (Math.abs(days) < 7) {
+    return rtf.format(Math.trunc(days), "day");
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+  }).format(new Date(target));
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
 }

@@ -29,6 +29,8 @@
 ## Phase 2 — Core Domain (Weeks 4–6)
 - Implement Contacts & Leads CRUD, pipeline stages, CSV import, public lead form.
 - Build Estimate authoring (line items, taxes/discounts, templating, PDF, e-signature).
+  - `/estimates/new` route delivers draft authoring with line items, status, notes (Phase 2 baseline).
+  - `/estimates/[id]` detail exposes status transitions and job conversion workflow.
 - Convert Estimates → Jobs; scheduling scaffolding; job status transitions.
 - Implement Tasks & Checklists with templates and per-job instantiation.
 - Deliver Files & Photos flow (upload, albums, EXIF, resizing).
