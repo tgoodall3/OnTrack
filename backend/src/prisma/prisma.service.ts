@@ -122,7 +122,6 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'ChecklistTemplate',
   'Contact',
   'Estimate',
-  'EstimateApproval',
   'EstimateLineItem',
   'EstimateTemplate',
   'EstimateTemplateItem',

@@ -22,7 +22,7 @@ export type EstimateTemplateSummary = {
 };
 
 async function fetchTemplates(includeArchived: boolean): Promise<EstimateTemplateSummary[]> {
-  const url = new URL(`${API_BASE_URL}/estimates/templates`);
+  const url = new URL(`${API_BASE_URL}/estimate-templates`);
   if (includeArchived) {
     url.searchParams.set("includeArchived", "true");
   }
@@ -54,7 +54,7 @@ export function useApplyEstimateTemplate(estimateId: string) {
 
   return useMutation<unknown, Error, { templateId: string }>({
     mutationFn: async ({ templateId }) => {
-      const response = await fetch(`${API_BASE_URL}/estimates/templates/${templateId}/apply`, {
+      const response = await fetch(`${API_BASE_URL}/estimate-templates/${templateId}/apply`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

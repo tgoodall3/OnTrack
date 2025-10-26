@@ -4,6 +4,7 @@ import { EstimatesService } from './estimates.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestContextService } from '../context/request-context.service';
 import { EstimateMailerService } from './estimate-mailer.service';
+import { StorageService } from '../storage/storage.service';
 
 describe('EstimatesService', () => {
   let service: EstimatesService;
@@ -16,6 +17,7 @@ describe('EstimatesService', () => {
     RequestContextService,
     'context' | 'setTenantId' | 'setUser'
   >;
+  let storage: { uploadObject: jest.Mock; resolvePublicUrl: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -31,6 +33,10 @@ describe('EstimatesService', () => {
       },
       setTenantId: jest.fn(),
       setUser: jest.fn(),
+    };
+    storage = {
+      uploadObject: jest.fn(),
+      resolvePublicUrl: jest.fn((key: string) => `https://files/${key}`),
     };
 
     const module = await Test.createTestingModule({
@@ -49,6 +55,10 @@ describe('EstimatesService', () => {
           useValue: {
             sendEstimateEmail: jest.fn(),
           },
+        },
+        {
+          provide: StorageService,
+          useValue: storage,
         },
       ],
     }).compile();

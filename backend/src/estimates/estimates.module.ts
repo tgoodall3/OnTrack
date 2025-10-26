@@ -5,9 +5,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { TenantGuard } from '../tenancy/tenant.guard';
 import { RequestContextModule } from '../context/request-context.module';
 import { EstimateMailerService } from './estimate-mailer.service';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
-  imports: [RequestContextModule, PrismaModule],
+  imports: [RequestContextModule, PrismaModule, StorageModule],
   controllers: [EstimatesController],
   providers: [EstimatesService, EstimateMailerService, TenantGuard],
   exports: [EstimatesService],

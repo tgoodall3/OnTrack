@@ -2,31 +2,31 @@
 
 :root {
   /* Base */
-  --background: #f4f7fb;          /* very light blue-gray */
-  --foreground: #0f172a;          /* slate-900 */
+  --background: #f6f8fa;
+  --foreground: #0c1b33;
 
   /* Brand */
-  --ontrack-primary: #1b5a91;      /* deep navy */
-  --ontrack-primary-foreground: #f8fafc; /* near-white on navy */
+  --ontrack-primary: #2563eb;
+  --ontrack-primary-foreground: #f9fafb;
 
-  /* Accent (unchanged – good contrast on dark) */
-  --ontrack-accent: #9fe870;       
-  --ontrack-accent-foreground: #052e16;
+  /* Accent */
+  --ontrack-accent: #f5b15c;
+  --ontrack-accent-foreground: #3b2f0b;
 
-  /* Muted surfaces (lighter so dark text meets 4.5:1) */
-  --ontrack-muted: #eaf2fb;        /* lighter than #d9e2ef */
-  --ontrack-muted-foreground: #ffffff; /* darker text for muted areas */
+  /* Muted surfaces */
+  --ontrack-muted: #e8edf5;
+  --ontrack-muted-foreground: #1e293b;
 
-  /* Cards + dividers */
+  /* Cards + borders */
   --ontrack-surface: #ffffff;
-  --ontrack-border: #9fb4d1;       /* darker than before for 3:1 non-text contrast */
+  --ontrack-border: #c3d0e0;
 
-  /* Optional tonal ladder (useful for utilities) */
-  --ontrack-primary-900: #ffffff;
-  --ontrack-primary-800: #0d2a46;
-  --ontrack-primary-700: #0f3659;  /* == primary */
-  --ontrack-primary-600: #184a78;
-  --ontrack-primary-500: #1f5d96;
+  /* Tonal ladder (optional) */
+  --ontrack-primary-900: #1e3a8a;
+  --ontrack-primary-800: #1d4ed8;
+  --ontrack-primary-700: #2563eb;
+  --ontrack-primary-600: #3b82f6;
+  --ontrack-primary-500: #60a5fa;
 }
 
 @theme inline {
@@ -43,18 +43,19 @@
   --font-sans: var(--font-manrope);
   --font-display: var(--font-manrope);
   --font-mono: var(--font-geist-mono);
-  --shadow-elevated: 0 15px 40px -20px rgba(15, 54, 89, 0.35);
+  --shadow-elevated: 0 15px 40px -20px rgba(37, 99, 235, 0.15);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b1623;
-    --foreground: #f8fafc;
+    --background: #0a1220;
+    --foreground: #f1f5f9;
 
-    --ontrack-surface: #101c2a;
-    --ontrack-border: #2a3a50;       /* a bit lighter so it’s visible on dark */
-    --ontrack-muted: #152237;
-    --ontrack-muted-foreground: #e6eefb; /* lighter text on muted dark */
+    --ontrack-surface: #131c2e;
+    --ontrack-border: #334155;
+    --ontrack-muted: #1e293b;
+    --ontrack-muted-foreground: #dbe4f0;
+    --ontrack-accent: #f7c97d;
   }
 }
 
@@ -66,8 +67,8 @@ body {
 
 .ontrack-gradient {
   background-image:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--ontrack-accent) 30%, transparent), transparent 45%),
-    radial-gradient(circle at bottom right, color-mix(in srgb, var(--ontrack-primary) 25%, transparent), transparent 40%);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--ontrack-accent) 25%, transparent), transparent 45%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--ontrack-primary) 20%, transparent), transparent 40%);
 }
 
 .glass-panel {
@@ -76,7 +77,6 @@ body {
   border: 1px solid var(--ontrack-border);
 }
 
-/* Helpful utilities */
 .text-on-muted { color: var(--ontrack-muted-foreground); }
 .text-on-primary { color: var(--ontrack-primary-foreground); }
 .bg-muted { background: var(--ontrack-muted); }

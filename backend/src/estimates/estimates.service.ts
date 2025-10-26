@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { EstimateStatus, Prisma } from '@prisma/client';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { EstimateStatus, FileType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestContextService } from '../context/request-context.service';
 import { ListEstimatesDto } from './dto/list-estimates.dto';
@@ -8,6 +8,8 @@ import { UpdateEstimateDto } from './dto/update-estimate.dto';
 import { SendEstimateDto } from './dto/send-estimate.dto';
 import { ApproveEstimateDto } from './dto/approve-estimate.dto';
 import { EstimateMailerService } from './estimate-mailer.service';
+import { StorageService } from '../storage/storage.service';
+import PDFDocument from 'pdfkit';
 
 type EstimateWithRelations = Prisma.EstimateGetPayload<{
   include: {
@@ -88,9 +90,12 @@ export interface EstimateApprovalSnapshot {
 
 @Injectable()
 export class EstimatesService {
+  private readonly logger = new Logger(EstimatesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
+    private readonly storage: StorageService,
     private readonly estimateMailer: EstimateMailerService,
   ) {}
 
@@ -506,14 +511,105 @@ export class EstimatesService {
       });
     });
 
-    await this.logLeadActivity(tenantId, estimate.lead.id, 'lead.estimate_sent', {
+    const summary = await this.getSummaryById(id, tenantId);
+
+    let pdfFileId: string | null = null;
+    try {
+      const pdfBuffer = await this.generateEstimatePdf(summary);
+      const timestamp = now.toISOString().replace(/[-:T.Z]/g, '');
+      const fileName = `estimate-${summary.number}-${timestamp}.pdf`;
+      const storageKey = `tenants/${tenantId}/estimates/${summary.id}/${fileName}`;
+
+      await this.storage.uploadObject(storageKey, pdfBuffer, 'application/pdf');
+
+      const fileRecord = await this.prisma.file.create({
+        data: {
+          tenant: { connect: { id: tenantId } },
+          estimate: { connect: { id: summary.id } },
+          url: this.storage.resolvePublicUrl(storageKey),
+          type: FileType.DOCUMENT,
+          metadata: {
+            key: storageKey,
+            fileName,
+            mimeType: 'application/pdf',
+            fileSize: pdfBuffer.length,
+          } as Prisma.JsonObject,
+          uploadedBy: this.requestContext.context.userId
+            ? { connect: { id: this.requestContext.context.userId } }
+            : undefined,
+        },
+      });
+
+      pdfFileId = fileRecord.id;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to generate estimate PDF for ${id}: ${String(
+          (error as Error)?.message ?? error,
+        )}`,
+      );
+    }
+
+    await this.logLeadActivity(tenantId, summary.lead.id, 'lead.estimate_sent', {
       estimateId: id,
       status: EstimateStatus.SENT,
       recipientEmail: dto.recipientEmail,
       subject: emailResult.subject,
+      pdfFileId,
     });
 
-    return this.getSummaryById(id, tenantId);
+    return summary;
+  }
+
+  private async generateEstimatePdf(summary: EstimateSummary): Promise<Buffer> {
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 50 });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', (error) => reject(error));
+
+      doc.fontSize(20).text(`Estimate ${summary.number}`, { align: 'left' });
+      doc.moveDown();
+
+      doc.fontSize(12).text(`Status: ${summary.status}`);
+      doc.text(`Created: ${this.formatDisplayDate(summary.createdAt)}`);
+      doc.text(
+        `Expires: ${summary.expiresAt ? this.formatDisplayDate(summary.expiresAt) : 'Not set'}`,
+      );
+      doc.text(`Customer: ${summary.lead.contactName ?? 'Customer'}`);
+      doc.text(`Template: ${summary.template?.name ?? 'Manual entry'}`);
+      doc.moveDown();
+
+      doc.fontSize(14).text('Line Items', { underline: true });
+      doc.moveDown(0.5);
+
+      summary.lineItems.forEach((item, index) => {
+        doc
+          .fontSize(12)
+          .text(`${index + 1}. ${item.description}`, { continued: false });
+        doc
+          .fontSize(10)
+          .text(
+            `   Qty: ${item.quantity}   Unit: ${this.formatCurrency(item.unitPrice)}   Total: ${this.formatCurrency(item.total)}`,
+          );
+        doc.moveDown(0.5);
+      });
+
+      doc.moveDown();
+      doc.fontSize(12).text(`Subtotal: ${this.formatCurrency(summary.subtotal)}`);
+      doc.text(`Tax: ${this.formatCurrency(summary.tax)}`);
+      doc.text(`Total: ${this.formatCurrency(summary.total)}`);
+
+      if (summary.notes?.trim()) {
+        doc.moveDown();
+        doc.fontSize(12).text('Notes', { underline: true });
+        doc.moveDown(0.25);
+        doc.fontSize(11).text(summary.notes);
+      }
+
+      doc.end();
+    });
   }
 
   async approve(id: string, dto: ApproveEstimateDto): Promise<EstimateSummary> {
@@ -743,6 +839,21 @@ export class EstimatesService {
         meta: meta ? (meta as Prisma.JsonValue) : undefined,
       },
     });
+  }
+
+  private formatCurrency(value: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(value);
+  }
+
+  private formatDisplayDate(iso: string): string {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(new Date(iso));
   }
 }
 

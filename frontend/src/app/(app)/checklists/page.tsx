@@ -72,6 +72,23 @@ export default function ChecklistsPage() {
     setItems((current) => (current.length === 1 ? current : current.filter((item) => item.id !== id)));
   };
 
+  const handleMoveItem = (id: string, direction: number) => {
+    setItems((current) => {
+      const index = current.findIndex((item) => item.id === id);
+      if (index === -1) {
+        return current;
+      }
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
+
   const resetForm = () => {
     setName("");
     setDescription("");

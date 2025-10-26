@@ -15,7 +15,7 @@ import { CreateEstimateTemplateDto } from './dto/create-estimate-template.dto';
 import { UpdateEstimateTemplateDto } from './dto/update-estimate-template.dto';
 import { ApplyEstimateTemplateDto } from './dto/apply-estimate-template.dto';
 
-@Controller('estimates/templates')
+@Controller('estimate-templates')
 @UseGuards(TenantGuard)
 export class EstimateTemplatesController {
   constructor(

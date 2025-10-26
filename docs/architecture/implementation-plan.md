@@ -33,7 +33,7 @@
 - Build Estimate authoring (line items, taxes/discounts, templating, PDF, e-signature).
   - `/estimates/new` route delivers draft authoring with line items, status, notes (Phase 2 baseline).
   - `/estimates/[id]` detail exposes status transitions and job conversion workflow.
-  - Send + approval flows capture recipient metadata, log activity, and unlock job scheduling.
+  - Send + approval flows capture recipient metadata, generate + attach PDFs, log activity, and unlock job scheduling.
   - Template library delivers `estimate_templates` + `estimate_template_items`, CRUD/apply endpoints, and UI to load, reapply, or clear templates in both the creator and detail flows with activity logging.
 - Convert Estimates → Jobs; scheduling scaffolding; job status transitions.
   - Estimate detail now enforces approval-first scheduling, adds resend/record guardrails, and surfaces inline scheduling errors.

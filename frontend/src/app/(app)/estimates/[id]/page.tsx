@@ -268,6 +268,9 @@ export default function EstimateDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["estimates"] }).catch(() => {
         // noop
       });
+      queryClient.invalidateQueries({ queryKey: ["estimates", estimateId, "files"] }).catch(() => {
+        // noop
+      });
       setSendFormError(null);
       setSendForm((prev) => ({ ...prev, message: "" }));
       toast({

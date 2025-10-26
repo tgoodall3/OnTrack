@@ -80,6 +80,21 @@ export class StorageService {
     };
   }
 
+  async uploadObject(
+    key: string,
+    body: Buffer | Uint8Array,
+    contentType: string,
+  ): Promise<void> {
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    });
+
+    await this.s3Client.send(command);
+  }
+
   async deleteObject(key: string): Promise<void> {
     try {
       await this.s3Client.send(
