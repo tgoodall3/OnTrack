@@ -79,6 +79,12 @@ type ScheduleJobInput = {
   scheduledEnd?: string;
 };
 
+type CreatedJob = {
+  id: string;
+  status: string;
+  scheduledStart?: string | null;
+};
+
 type SendEstimateInput = {
   recipientEmail: string;
   recipientName?: string;
@@ -179,7 +185,7 @@ async function approveEstimateRequest(id: string, payload: ApproveEstimateInput)
   return response.json();
 }
 
-async function scheduleJob(payload: ScheduleJobInput) {
+async function scheduleJob(payload: ScheduleJobInput): Promise<CreatedJob> {
   const response = await fetch(`${API_BASE_URL}/jobs`, {
     method: "POST",
     headers: {
@@ -193,7 +199,7 @@ async function scheduleJob(payload: ScheduleJobInput) {
     throw new Error(`Job creation failed (${response.status})`);
   }
 
-  return response.json() as Promise<{ id: string }>;
+  return response.json();
 }
 
 export default function EstimateDetailPage() {
@@ -318,9 +324,9 @@ export default function EstimateDetailPage() {
     },
   });
 
-  const scheduleJobMutation = useMutation<{ id: string }, Error, ScheduleJobInput>({
+  const scheduleJobMutation = useMutation<CreatedJob, Error, ScheduleJobInput>({
     mutationFn: scheduleJob,
-    onSuccess: () => {
+    onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["estimates", estimateId] }).catch(() => {
         // noop
       });
@@ -334,7 +340,7 @@ export default function EstimateDetailPage() {
         title: "Job scheduled",
         description: "The job is now visible on the work board.",
       });
-      router.push("/work?status=SCHEDULED");
+      router.push(`/work?status=${job.status ?? "SCHEDULED"}`);
     },
     onError: (mutationError) => {
       setJobFormError(mutationError.message);

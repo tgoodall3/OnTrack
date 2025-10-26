@@ -451,15 +451,52 @@ export class EstimatesService {
         lead: {
           select: {
             id: true,
+            stage: true,
             contact: { select: { name: true } },
           },
         },
         lineItems: true,
+        approvals: true,
+        job: {
+          select: {
+            id: true,
+            status: true,
+            scheduledStart: true,
+          },
+        },
+        template: { select: { id: true, name: true } },
       },
     });
 
     if (!estimate) {
       throw new BadRequestException('Estimate not found');
+    }
+
+    const now = new Date();
+    let pdfAttachment:
+      | {
+          buffer: Buffer;
+          fileName: string;
+        }
+      | null = null;
+
+    try {
+      const pdfReadySummary: EstimateSummary = {
+        ...this.toSummary(estimate),
+        status: EstimateStatus.SENT,
+      };
+      const buffer = await this.generateEstimatePdf(pdfReadySummary);
+      const timestamp = now.toISOString().replace(/[-:T.Z]/g, '');
+      pdfAttachment = {
+        buffer,
+        fileName: `estimate-${estimate.number}-${timestamp}.pdf`,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to prepare estimate PDF for ${id}: ${String(
+          (error as Error)?.message ?? error,
+        )}`,
+      );
     }
 
     const emailResult = await this.estimateMailer.sendEstimateEmail(
@@ -482,9 +519,8 @@ export class EstimatesService {
         })),
       },
       dto,
+      pdfAttachment ? { pdf: pdfAttachment } : undefined,
     );
-
-    const now = new Date();
 
     await this.prisma.$transaction(async (tx) => {
       await tx.estimate.update({
@@ -514,39 +550,42 @@ export class EstimatesService {
     const summary = await this.getSummaryById(id, tenantId);
 
     let pdfFileId: string | null = null;
-    try {
-      const pdfBuffer = await this.generateEstimatePdf(summary);
-      const timestamp = now.toISOString().replace(/[-:T.Z]/g, '');
-      const fileName = `estimate-${summary.number}-${timestamp}.pdf`;
-      const storageKey = `tenants/${tenantId}/estimates/${summary.id}/${fileName}`;
+    if (pdfAttachment) {
+      try {
+        const storageKey = `tenants/${tenantId}/estimates/${summary.id}/${pdfAttachment.fileName}`;
 
-      await this.storage.uploadObject(storageKey, pdfBuffer, 'application/pdf');
+        await this.storage.uploadObject(
+          storageKey,
+          pdfAttachment.buffer,
+          'application/pdf',
+        );
 
-      const fileRecord = await this.prisma.file.create({
-        data: {
-          tenant: { connect: { id: tenantId } },
-          estimate: { connect: { id: summary.id } },
-          url: this.storage.resolvePublicUrl(storageKey),
-          type: FileType.DOCUMENT,
-          metadata: {
-            key: storageKey,
-            fileName,
-            mimeType: 'application/pdf',
-            fileSize: pdfBuffer.length,
-          } as Prisma.JsonObject,
-          uploadedBy: this.requestContext.context.userId
-            ? { connect: { id: this.requestContext.context.userId } }
-            : undefined,
-        },
-      });
+        const fileRecord = await this.prisma.file.create({
+          data: {
+            tenant: { connect: { id: tenantId } },
+            estimate: { connect: { id: summary.id } },
+            url: this.storage.resolvePublicUrl(storageKey),
+            type: FileType.DOCUMENT,
+            metadata: {
+              key: storageKey,
+              fileName: pdfAttachment.fileName,
+              mimeType: 'application/pdf',
+              fileSize: pdfAttachment.buffer.length,
+            } as Prisma.JsonObject,
+            uploadedBy: this.requestContext.context.userId
+              ? { connect: { id: this.requestContext.context.userId } }
+              : undefined,
+          },
+        });
 
-      pdfFileId = fileRecord.id;
-    } catch (error) {
-      this.logger.warn(
-        `Failed to generate estimate PDF for ${id}: ${String(
-          (error as Error)?.message ?? error,
-        )}`,
-      );
+        pdfFileId = fileRecord.id;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to persist estimate PDF for ${id}: ${String(
+            (error as Error)?.message ?? error,
+          )}`,
+        );
+      }
     }
 
     await this.logLeadActivity(tenantId, summary.lead.id, 'lead.estimate_sent', {

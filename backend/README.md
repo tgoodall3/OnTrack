@@ -30,6 +30,19 @@ pnpm --filter @ontrack/api start:dev
 
 The service reads configuration from environment variables. Use `.env.example` as a template and supply database credentials along with integration keys (Stripe, Twilio, Resend, S3).
 
+### Local email delivery
+
+Estimate sending now uses SMTP. For local development we default to Mailhog (`smtp://127.0.0.1:1025`). Run the Mailhog service from `docker-compose.yml`, then set the following vars (already present in `.env.example`):
+
+```
+SMTP_HOST=127.0.0.1
+SMTP_PORT=1025
+SMTP_SECURE=false
+SMTP_FROM="OnTrack <no-reply@ontrack.local>"
+```
+
+Optional `SMTP_USER`/`SMTP_PASS` can be provided when connecting to a real provider. Preview captured messages at http://localhost:8025.
+
 ## Project Layout
 
 - `src/` - NestJS modules, controllers, services, and shared providers

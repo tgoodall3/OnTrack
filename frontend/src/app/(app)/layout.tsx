@@ -8,7 +8,7 @@ import { ToastContainer } from "@/components/ui/toast-container";
 
 function HeaderActions() {
   return (
-    <div className="flex items-center gap-3">
+    <div className="hidden items-center gap-3 sm:flex">
       <Link
         href="/notifications"
         className="flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-surface shadow-sm transition-colors hover:border-primary/40 hover:text-primary"
@@ -52,19 +52,19 @@ export default function AppLayout({ children }: PropsWithChildren) {
       <div className="relative flex min-h-screen flex-col bg-background text-foreground">
         <ToastContainer />
         <header className="glass-panel border-b border-border/60">
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-6">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 md:py-4">
+            <div className="flex items-center gap-4 sm:gap-6">
               <Logo />
-              <MobileNav />
             </div>
             <div className="hidden md:block">
               {/* <AppNavigation /> */}
             </div>
             <HeaderActions />
+              <MobileNav />
           </div>
         </header>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 pb-8 pt-6 md:px-6 lg:pb-12">
+        <div className="mx-auto flex w-full max-w-7xl flex-1 gap-4 px-3 pb-6 pt-4 sm:gap-6 sm:px-4 md:px-6 md:pb-8 md:pt-6 lg:pb-12">
           <aside className="sticky top-24 hidden h-fit w-60 shrink-0 rounded-3xl border border-border/80 bg-surface/95 p-4 shadow-lg shadow-primary/5 md:block">
             <div className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Workspace
@@ -83,7 +83,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
           </aside>
 
           <main className="flex-1">
-            <div className="rounded-3xl border border-border/60 bg-surface/95 p-6 shadow-lg shadow-primary/10 md:p-10">
+            <div className="rounded-2xl border border-border/60 bg-surface/95 p-4 shadow-lg shadow-primary/10 sm:rounded-3xl sm:p-6 md:p-8 lg:p-10">
               {children}
             </div>
           </main>

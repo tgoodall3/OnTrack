@@ -105,6 +105,7 @@ export default function LeadsPage() {
   const [importDefaultStage, setImportDefaultStage] = useState<LeadStage>("NEW");
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
+  const [showConvertedLeads, setShowConvertedLeads] = useState(false);
 
   const hasPropertyInput = useMemo(() => {
     if (useExistingProperty) return false;
@@ -121,6 +122,13 @@ export default function LeadsPage() {
     void loadLeads();
     void loadLookups();
   }, []);
+
+  const visibleLeads = useMemo(() => {
+    if (showConvertedLeads) {
+      return leads;
+    }
+    return leads.filter((lead) => lead.metrics.estimates === 0 && lead.metrics.jobs === 0);
+  }, [leads, showConvertedLeads]);
 
   async function loadLookups() {
     setContactsLoading(true);
@@ -656,17 +664,29 @@ export default function LeadsPage() {
       )}
 
       <section className="space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-foreground">Active leads</h2>
+          <label className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showConvertedLeads}
+              onChange={(event) => setShowConvertedLeads(event.target.checked)}
+              className="h-4 w-4 rounded border border-border text-primary focus:ring-0"
+            />
+            Show converted leads
+          </label>
+        </header>
         {loading ? (
           <div className="flex items-center gap-3 rounded-3xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             Loading leads…
           </div>
-        ) : leads.length === 0 ? (
+        ) : visibleLeads.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-border/80 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
             No leads yet. Add your first opportunity above to start building the pipeline.
           </div>
         ) : (
-          leads.map((lead) => (
+          visibleLeads.map((lead) => (
             <article
               key={lead.id}
               className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/50"

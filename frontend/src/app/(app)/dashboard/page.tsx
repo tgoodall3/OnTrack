@@ -176,7 +176,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-10">
-      <section className="flex flex-col gap-6 rounded-3xl bg-gradient-to-br from-primary/92 via-primary to-primary/80 p-7 text-primary-foreground shadow-lg shadow-primary/30 md:flex-row md:items-center md:justify-between md:p-10">
+      <section className="flex flex-col gap-6 rounded-3xl bg-gradient-to-br from-primary/92 via-primary to-primary/80 p-7 text-primary-foreground shadow-lg shadow-primary/30 md:flex-row md:items-center md:justify-between md:p-10 ">
         <div className="space-y-3">
           <span className="inline-flex items-center rounded-full bg-primary-foreground/10 px-3 py-1 text-xs font-semibold uppercase">
             {formatShortDate(now)}
@@ -202,7 +202,7 @@ export default function DashboardPage() {
             </span>
           </div>
         </div>
-        <div className="rounded-3xl bg-primary-foreground/10 p-5 backdrop-blur">
+        <div className="rounded-3xl bg-primary-foreground/10 p-5">
           <p className="text-sm uppercase tracking-wide text-primary-foreground/70">Upcoming Visit</p>
           <div className="mt-3 space-y-2">
             <p className="text-2xl font-semibold">{heroVisit ? heroVisit.title : "Awaiting schedule"}</p>

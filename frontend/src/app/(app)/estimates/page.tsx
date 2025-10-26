@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CalendarClock, ClipboardCheck, Loader2, Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
@@ -101,6 +102,7 @@ async function createJob(payload: ScheduleJobInput): Promise<CreatedJob> {
 }
 
 export default function EstimatesPage() {
+  const router = useRouter();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight") ?? "";
@@ -193,6 +195,7 @@ export default function EstimatesPage() {
         description: "Job has been added to the work board.",
       });
       resetJobForm();
+      router.push(`/work?status=${job.status ?? "SCHEDULED"}`);
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["estimates"] });
@@ -202,7 +205,17 @@ export default function EstimatesPage() {
   });
 
   const estimates = data ?? [];
-  const hasData = estimates.length > 0;
+  const [showScheduled, setShowScheduled] = useState(false);
+  const visibleEstimates = useMemo(
+    () => {
+      if (showScheduled) {
+        return estimates;
+      }
+      return estimates.filter((estimate) => !estimate.job);
+    },
+    [estimates, showScheduled],
+  );
+  const hasData = visibleEstimates.length > 0;
 
   function openJobForm(estimate: EstimateSummary) {
     setJobForm({
@@ -254,8 +267,17 @@ export default function EstimatesPage() {
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold">
             <ClipboardCheck className="h-4 w-4 text-primary" />
-            {estimates.length} estimates
+            {showScheduled ? estimates.length : visibleEstimates.length} estimates
           </span>
+          <label className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border border-border text-primary focus:ring-0"
+              checked={showScheduled}
+              onChange={(event) => setShowScheduled(event.target.checked)}
+            />
+            Include scheduled jobs
+          </label>
           <Link
             href="/estimates/new"
             className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
@@ -283,7 +305,7 @@ export default function EstimatesPage() {
         </div>
       ) : (
         <section className="space-y-4">
-          {estimates.map((estimate) => {
+          {visibleEstimates.map((estimate) => {
             const isHighlighted = highlightId && estimate.id === highlightId;
             return (
               <article

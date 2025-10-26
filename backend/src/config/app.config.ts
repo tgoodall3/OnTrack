@@ -24,6 +24,14 @@ export interface AppConfig {
     maxUploadBytes: number;
     uploadExpiresInSeconds: number;
   };
+  mail: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user?: string | null;
+    pass?: string | null;
+    from: string;
+  };
 }
 
 export const createAppConfig = (env: Env): AppConfig => {
@@ -40,6 +48,8 @@ export const createAppConfig = (env: Env): AppConfig => {
     Number.isFinite(rawUploadExpiry) && rawUploadExpiry >= 60
       ? rawUploadExpiry
       : 300;
+
+  const mailPort = env.SMTP_PORT ? Number(env.SMTP_PORT) : 1025;
 
   return {
     app: {
@@ -74,6 +84,17 @@ export const createAppConfig = (env: Env): AppConfig => {
       publicUrl: env.STORAGE_PUBLIC_URL,
       maxUploadBytes: Math.max(1, maxUploadMb) * 1024 * 1024,
       uploadExpiresInSeconds: uploadExpires,
+    },
+    mail: {
+      host: env.SMTP_HOST ?? '127.0.0.1',
+      port: Number.isFinite(mailPort) && mailPort > 0 ? mailPort : 1025,
+      secure:
+        env.SMTP_SECURE !== undefined
+          ? env.SMTP_SECURE.toLowerCase() === 'true'
+          : false,
+      user: env.SMTP_USER ?? null,
+      pass: env.SMTP_PASS ?? null,
+      from: env.SMTP_FROM ?? 'OnTrack <no-reply@ontrack.local>',
     },
   };
 };

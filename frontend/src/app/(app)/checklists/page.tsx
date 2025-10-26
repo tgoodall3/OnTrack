@@ -355,26 +355,47 @@ export default function ChecklistsPage() {
               </button>
             </header>
 
+
             <div className="space-y-2">
               {items.map((item, index) => (
-                <div key={item.id} className="flex items-center gap-2">
+                <div key={item.id} className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-muted-foreground">{index + 1}.</span>
                   <input
                     type="text"
                     value={item.title}
                     onChange={(event) => handleItemChange(item.id, event.target.value)}
                     placeholder="Describe the step to complete"
-                    className="flex-1 rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                    className="flex-1 min-w-[200px] rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveItem(item.id)}
-                    className="inline-flex items-center rounded-full border border-border p-2 text-muted-foreground transition hover:border-accent hover:text-accent disabled:opacity-50"
-                    disabled={items.length === 1}
-                    aria-label="Remove item"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveItem(item.id, -1)}
+                      className="inline-flex items-center rounded-full border border-border p-2 text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-50"
+                      disabled={index === 0}
+                      aria-label="Move item up"
+                    >
+                      <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveItem(item.id, 1)}
+                      className="inline-flex items-center rounded-full border border-border p-2 text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-50"
+                      disabled={index === items.length - 1}
+                      aria-label="Move item down"
+                    >
+                      <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(item.id)}
+                      className="inline-flex items-center rounded-full border border-border p-2 text-muted-foreground transition hover-border-accent hover:text-accent disabled:opacity-50"
+                      disabled={items.length === 1}
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
