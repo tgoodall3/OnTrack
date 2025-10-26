@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Loader2, MapPin, Trash2, Users } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -34,6 +34,12 @@ type LeadSummary = {
 type LeadStage = "NEW" | "QUALIFIED" | "SCHEDULED_VISIT" | "WON" | "LOST";
 
 const LEAD_STAGES: LeadStage[] = ["NEW", "QUALIFIED", "SCHEDULED_VISIT", "WON", "LOST"];
+
+type LeadImportResult = {
+  created: number;
+  failed: number;
+  errors: Array<{ row: number; error: string }>;
+};
 
 type ContactOption = {
   id: string;
@@ -94,6 +100,10 @@ export default function LeadsPage() {
   const [propertiesLoading, setPropertiesLoading] = useState(false);
   const [useExistingProperty, setUseExistingProperty] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState<LeadImportResult | null>(null);
+  const [importDefaultStage, setImportDefaultStage] = useState<LeadStage>("NEW");
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
 
   const hasPropertyInput = useMemo(() => {
@@ -180,6 +190,59 @@ export default function LeadsPage() {
       setError(err instanceof Error ? err.message : "Failed to load leads.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  const handleImportClick = () => {
+    importInputRef.current?.click();
+  };
+
+  async function handleImportFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setImporting(true);
+    setImportSummary(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("defaultStage", importDefaultStage);
+
+      const response = await fetch(`${API_BASE_URL}/leads/import`, {
+        method: "POST",
+        headers: {
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => null);
+        throw new Error(message || `Import failed (${response.status})`);
+      }
+
+      const payload: LeadImportResult = await response.json();
+      setImportSummary(payload);
+      toast({
+        variant: "success",
+        title: "Import complete",
+        description: `${payload.created} leads imported${payload.failed ? `, ${payload.failed} failed` : ""}.`,
+      });
+      void loadLeads();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Import failed",
+        description: err instanceof Error ? err.message : "Unable to import leads.",
+      });
+    } finally {
+      setImporting(false);
+      if (event.target) {
+        event.target.value = "";
+      }
     }
   }
 
@@ -323,6 +386,77 @@ export default function LeadsPage() {
           {leads.length} active
         </div>
       </header>
+
+      <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-xl space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">Import from CSV</h2>
+            <p>
+              Upload a spreadsheet with columns like <code>name</code>, <code>email</code>, <code>phone</code>,{" "}
+              <code>source</code>, <code>notes</code>, and an optional <code>stage</code> override. Rows missing a
+              contact name will be skipped.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Default stage
+              <select
+                value={importDefaultStage}
+                onChange={(event) => setImportDefaultStage(event.target.value as LeadStage)}
+                className="mt-1 w-40 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
+                disabled={importing}
+              >
+                {LEAD_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stage.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <input
+              ref={importInputRef}
+              type="file"
+              className="hidden"
+              accept=".csv,text/csv"
+              onChange={handleImportFile}
+            />
+            <button
+              type="button"
+              onClick={handleImportClick}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
+              disabled={importing}
+            >
+              {importing && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+              Import CSV
+            </button>
+          </div>
+        </div>
+        {importSummary && (
+          <div className="mt-4 rounded-2xl border border-border/60 bg-muted/20 p-4">
+            <p className="text-sm text-foreground">
+              Imported <strong>{importSummary.created}</strong> lead{importSummary.created === 1 ? "" : "s"}.{" "}
+              {importSummary.failed > 0
+                ? `Failed to import ${importSummary.failed} row${importSummary.failed === 1 ? "" : "s"}.`
+                : "No errors detected."}
+            </p>
+            {importSummary.errors.length > 0 && (
+              <ul className="mt-2 space-y-1 text-xs text-accent">
+                {importSummary.errors.slice(0, 5).map((entry) => (
+                  <li key={`${entry.row}-${entry.error}`}>
+                    Row {entry.row}: {entry.error}
+                  </li>
+                ))}
+                {importSummary.errors.length > 5 && (
+                  <li>+{importSummary.errors.length - 5} additional error{importSummary.errors.length - 5 === 1 ? "" : "s"}.</li>
+                )}
+              </ul>
+            )}
+          </div>
+        )}
+        <p className="mt-4 text-xs text-muted-foreground">
+          Need a public lead capture form? Share <code className="rounded bg-muted/60 px-2 py-1">/public/{TENANT_HEADER}/lead</code> with prospects.
+        </p>
+      </section>
 
       <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/10">
         <header className="mb-4 flex items-center justify-between">

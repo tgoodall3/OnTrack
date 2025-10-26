@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { EstimateStatus } from '@prisma/client';
@@ -30,6 +31,10 @@ export class CreateEstimateDto {
 
   @IsOptional()
   @IsString()
+  templateId?: string;
+
+  @IsOptional()
+  @IsString()
   number?: string;
 
   @IsOptional()
@@ -44,9 +49,11 @@ export class CreateEstimateDto {
   @IsString()
   notes?: string;
 
+  @ValidateIf((dto) => !dto.templateId)
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => CreateLineItemDto)
-  lineItems!: CreateLineItemDto[];
+  lineItems?: CreateLineItemDto[];
+
 }

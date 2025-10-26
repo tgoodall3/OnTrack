@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { JobStatus, LeadStage } from '@prisma/client';
 import { JobsService } from './jobs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestContextService } from '../context/request-context.service';
 
 describe('JobsService', () => {
   let service: JobsService;
@@ -10,12 +11,25 @@ describe('JobsService', () => {
       findMany: jest.Mock;
     };
   };
+  let requestContext: Pick<
+    RequestContextService,
+    'context' | 'setTenantId' | 'setUser'
+  >;
 
   beforeEach(async () => {
     prisma = {
       job: {
         findMany: jest.fn(),
       },
+    };
+    requestContext = {
+      context: {
+        requestId: 'req-1',
+        tenantId: 'tenant_1',
+        userId: 'user_1',
+      },
+      setTenantId: jest.fn(),
+      setUser: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -24,6 +38,10 @@ describe('JobsService', () => {
         {
           provide: PrismaService,
           useValue: prisma,
+        },
+        {
+          provide: RequestContextService,
+          useValue: requestContext,
         },
       ],
     }).compile();

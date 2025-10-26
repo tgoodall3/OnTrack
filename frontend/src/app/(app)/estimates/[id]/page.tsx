@@ -4,8 +4,9 @@ import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarClock, ClipboardList, Loader2, Timer } from "lucide-react";
+import { ArrowLeft, CalendarClock, ClipboardList, Layers, Loader2, Timer } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useEstimateTemplates, useApplyEstimateTemplate } from "@/hooks/use-estimate-templates";
 import { FilesSection } from "@/components/files/files-section";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
@@ -58,6 +59,10 @@ type EstimateDetail = {
     unitPrice: number;
     total: number;
   }>;
+  template?: {
+    id: string;
+    name: string;
+  } | null;
   approvals: number;
   latestApproval: EstimateApprovalEntry | null;
   approvalHistory: EstimateApprovalEntry[];
@@ -122,6 +127,24 @@ async function patchEstimateStatus(id: string, status: EstimateStatus) {
   return response.json() as Promise<EstimateDetail>;
 }
 
+async function updateEstimateTemplateRequest(id: string, templateId: string | null): Promise<EstimateDetail> {
+  const response = await fetch(`${API_BASE_URL}/estimates/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    body: JSON.stringify({ templateId: templateId ?? "" }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => null);
+    throw new Error(message || `Unable to update template (${response.status})`);
+  }
+
+  return response.json();
+}
+
 async function sendEstimateRequest(id: string, payload: SendEstimateInput): Promise<EstimateDetail> {
   const response = await fetch(`${API_BASE_URL}/estimates/${id}/send`, {
     method: "POST",
@@ -179,6 +202,12 @@ export default function EstimateDetailPage() {
   const { toast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: templateOptions, isLoading: templatesLoading, error: templatesError } = useEstimateTemplates();
+  const availableTemplates = useMemo(
+    () => (templateOptions ?? []).filter((template) => !template.isArchived),
+    [templateOptions],
+  );
+  const applyTemplateMutation = useApplyEstimateTemplate(estimateId);
 
   const [jobForm, setJobForm] = useState({ start: "", end: "" });
   const [jobFormError, setJobFormError] = useState<string | null>(null);
@@ -186,6 +215,7 @@ export default function EstimateDetailPage() {
   const [sendFormError, setSendFormError] = useState<string | null>(null);
   const [approveForm, setApproveForm] = useState({ name: "", email: "", signature: "" });
   const [approveFormError, setApproveFormError] = useState<string | null>(null);
+  const [templateSelection, setTemplateSelection] = useState("");
 
   const {
     data: estimate,
@@ -195,6 +225,19 @@ export default function EstimateDetailPage() {
     queryKey: ["estimates", estimateId],
     queryFn: () => fetchEstimate(estimateId),
   });
+
+  const selectedTemplateOption = useMemo(
+    () => availableTemplates.find((template) => template.id === templateSelection),
+    [availableTemplates, templateSelection],
+  );
+  const currentTemplateId = estimate?.template?.id ?? "";
+
+  useEffect(() => {
+    if (!estimate) {
+      return;
+    }
+    setTemplateSelection(estimate.template?.id ?? "");
+  }, [estimate?.template?.id]);
 
   const updateStatusMutation = useMutation<EstimateDetail, Error, EstimateStatus>({
     mutationFn: (status) => patchEstimateStatus(estimateId, status),
@@ -261,6 +304,17 @@ export default function EstimateDetailPage() {
     },
   });
 
+  const updateTemplateMutation = useMutation<EstimateDetail, Error, { templateId: string | null }>({
+    mutationFn: ({ templateId }) => updateEstimateTemplateRequest(estimateId, templateId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["estimates", estimateId], updated);
+      queryClient.invalidateQueries({ queryKey: ["estimates"] }).catch(() => {
+        // noop
+      });
+      setTemplateSelection(updated.template?.id ?? "");
+    },
+  });
+
   const scheduleJobMutation = useMutation<{ id: string }, Error, ScheduleJobInput>({
     mutationFn: scheduleJob,
     onSuccess: () => {
@@ -288,6 +342,73 @@ export default function EstimateDetailPage() {
       });
     },
   });
+
+  const handleApplyTemplate = () => {
+    if (!templateSelection) {
+      toast({
+        variant: "destructive",
+        title: "Select a template",
+        description: "Choose a template before applying it to the estimate.",
+      });
+      return;
+    }
+
+    const templateName =
+      availableTemplates.find((template) => template.id === templateSelection)?.name ?? "template";
+
+    applyTemplateMutation.mutate(
+      { templateId: templateSelection },
+      {
+        onSuccess: (result) => {
+          const updated = result as EstimateDetail;
+          queryClient.setQueryData(["estimates", estimateId], updated);
+          toast({
+            variant: "success",
+            title: "Template applied",
+            description: `Loaded "${templateName}" onto this estimate.`,
+          });
+          setTemplateSelection(updated.template?.id ?? "");
+        },
+        onError: (mutationError) => {
+          toast({
+            variant: "destructive",
+            title: "Unable to apply template",
+            description: mutationError.message,
+          });
+        },
+      },
+    );
+  };
+
+  const handleRemoveTemplate = () => {
+    if (!estimate?.template) {
+      return;
+    }
+
+    const templateName = estimate.template.name;
+
+    updateTemplateMutation.mutate(
+      { templateId: null },
+      {
+        onSuccess: (updated) => {
+          queryClient.setQueryData(["estimates", estimateId], updated);
+          toast({
+            variant: "success",
+            title: "Template removed",
+            description: `"${templateName}" detached. Edit line items manually from here.`,
+          });
+          setTemplateSelection("");
+        },
+        onError: (mutationError) => {
+          toast({
+            variant: "destructive",
+            title: "Unable to remove template",
+            description: mutationError.message,
+          });
+        },
+      },
+    );
+  };
 
   const totals = useMemo(() => {
     if (!estimate) {
@@ -363,6 +484,13 @@ export default function EstimateDetailPage() {
     notFound();
   }
 
+  const isTemplateActionPending = applyTemplateMutation.isPending || updateTemplateMutation.isPending;
+  const templateApplyDisabled =
+    !templateSelection || templateSelection === currentTemplateId || isTemplateActionPending || templatesLoading;
+  const templateRemoveDisabled = !estimate.template || isTemplateActionPending;
+  const applyTemplateLabel = applyTemplateMutation.isPending ? "Applying..." : "Apply template";
+  const removeTemplateLabel = updateTemplateMutation.isPending ? "Removing..." : "Remove template";
+
   const statusLabel = STATUS_OPTIONS.find((option) => option.value === estimate.status)?.label ?? estimate.status;
   const allowJobScheduling = estimate.status === "APPROVED" && !estimate.job;
   const approvalHistory = estimate.approvalHistory ?? [];
@@ -398,6 +526,10 @@ export default function EstimateDetailPage() {
             <ClipboardList className="h-3 w-3 text-primary" aria-hidden="true" />
             {statusLabel}
           </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Layers className="h-3 w-3 text-primary" aria-hidden="true" />
+            {estimate.template ? estimate.template.name : "Manual entry"}
+          </span>
           <label className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground focus-within:border-primary">
             <span>Status</span>
             <select
@@ -431,6 +563,83 @@ export default function EstimateDetailPage() {
               View lead
             </Link>
           </header>
+
+          <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-foreground">Template</h3>
+              <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {estimate.template ? estimate.template.name : "Manual entry"}
+              </span>
+            </div>
+            {templatesError ? (
+              <p className="text-xs text-accent">{templatesError.message}</p>
+            ) : templatesLoading ? (
+              <div className="h-10 rounded-2xl border border-dashed border-border/60 bg-muted/30 animate-pulse" />
+            ) : availableTemplates.length === 0 ? (
+              <p className="text-xs">No templates available yet. Create one from the templates manager.</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={templateSelection}
+                    onChange={(event) => setTemplateSelection(event.target.value)}
+                    className="min-w-[160px] rounded border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+                    disabled={isTemplateActionPending}
+                  >
+                    <option value="">Manual entry</option>
+                    {availableTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleApplyTemplate}
+                    className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                    disabled={templateApplyDisabled}
+                  >
+                    {applyTemplateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                    {applyTemplateLabel}
+                  </button>
+                  {estimate.template && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveTemplate}
+                      className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-accent hover:text-accent disabled:opacity-60"
+                      disabled={templateRemoveDisabled}
+                    >
+                      {updateTemplateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                      {removeTemplateLabel}
+                    </button>
+                  )}
+                </div>
+                {selectedTemplateOption && (
+                  <div className="space-y-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-3">
+                    {selectedTemplateOption.description && (
+                      <p className="text-xs text-muted-foreground">{selectedTemplateOption.description}</p>
+                    )}
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {selectedTemplateOption.items.map((item) => (
+                        <li
+                          key={item.id}
+                          className="flex items-center justify-between gap-2 rounded border border-border/60 bg-background px-2 py-1"
+                        >
+                          <span className="truncate">{item.description}</span>
+                          <span className="text-muted-foreground/70">
+                            {item.quantity} x ${item.unitPrice.toFixed(2)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] text-muted-foreground/60">
+                      Applying a template will overwrite the current line items with the template defaults.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
           <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
             {estimate.lineItems.map((item) => (

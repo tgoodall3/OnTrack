@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { configuration } from './config/app.config';
@@ -16,6 +17,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
 import { ChecklistsModule } from './checklists/checklists.module';
+import { EstimateTemplatesModule } from './estimate-templates/estimate-templates.module';
 import { FilesModule } from './files/files.module';
 
 @Module({
@@ -29,6 +31,12 @@ import { FilesModule } from './files/files.module';
       },
       load: [configuration],
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60,
+        limit: 120,
+      },
+    ]),
     RequestContextModule,
     PrismaModule,
     DashboardModule,
@@ -36,6 +44,7 @@ import { FilesModule } from './files/files.module';
     ContactsModule,
     PropertiesModule,
     EstimatesModule,
+    EstimateTemplatesModule,
     JobsModule,
     TasksModule,
     UsersModule,

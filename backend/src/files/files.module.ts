@@ -4,10 +4,11 @@ import { FilesService } from './files.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { RequestContextModule } from '../context/request-context.module';
+import { TenantGuard } from '../tenancy/tenant.guard';
 
 @Module({
   imports: [PrismaModule, StorageModule, RequestContextModule],
   controllers: [FilesController],
-  providers: [FilesService],
+  providers: [FilesService, TenantGuard],
 })
 export class FilesModule {}

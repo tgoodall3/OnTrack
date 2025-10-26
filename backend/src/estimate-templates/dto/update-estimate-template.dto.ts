@@ -1,21 +1,21 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
-  IsDateString,
-  IsEnum,
+  IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { EstimateStatus } from '@prisma/client';
 
-class UpdateLineItemDto {
+class UpdateTemplateItemDto {
   @IsOptional()
   @IsString()
   id?: string;
 
   @IsString()
+  @MaxLength(240)
   description!: string;
 
   @Type(() => Number)
@@ -27,26 +27,24 @@ class UpdateLineItemDto {
   unitPrice!: number;
 }
 
-export class UpdateEstimateDto {
+export class UpdateEstimateTemplateDto {
   @IsOptional()
-  @IsEnum(EstimateStatus)
-  status?: EstimateStatus;
+  @IsString()
+  @MaxLength(120)
+  name?: string;
 
   @IsOptional()
   @IsString()
-  templateId?: string;
+  @MaxLength(500)
+  description?: string | null;
 
   @IsOptional()
-  @IsDateString()
-  expiresAt?: string;
-
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  @IsBoolean()
+  isArchived?: boolean;
 
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => UpdateLineItemDto)
-  lineItems?: UpdateLineItemDto[];
+  @Type(() => UpdateTemplateItemDto)
+  items?: UpdateTemplateItemDto[];
 }

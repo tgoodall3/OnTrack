@@ -21,6 +21,7 @@ model Tenant {
   checklistTemplates ChecklistTemplate[]
   contacts           Contact[]
   estimates          Estimate[]
+  estimateTemplates   EstimateTemplate[]
   files              File[]
   invoices           Invoice[]
   jobs               Job[]
@@ -163,6 +164,7 @@ model Estimate {
   tenantId  String
   leadId    String
   number    String
+  templateId String?
   status    EstimateStatus     @default(DRAFT)
   subtotal  Decimal            @default(0) @db.Decimal(12, 2)
   tax       Decimal            @default(0) @db.Decimal(12, 2)
@@ -173,6 +175,7 @@ model Estimate {
   updatedAt DateTime           @updatedAt
   lead      Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
   tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template  EstimateTemplate?  @relation(fields: [templateId], references: [id])
   approvals EstimateApproval[]
   lineItems EstimateLineItem[]
   files     File[]
@@ -503,4 +506,33 @@ enum NotificationChannel {
   EMAIL
   IN_APP
   SMS
+}
+model EstimateTemplate {
+  id          String                 @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  isArchived  Boolean                @default(false)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items       EstimateTemplateItem[]
+  estimates   Estimate[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isArchived])
+}
+
+model EstimateTemplateItem {
+  id          String  @id @default(cuid())
+  templateId  String
+  description String
+  quantity    Decimal @default(1) @db.Decimal(12, 2)
+  unitPrice   Decimal @default(0) @db.Decimal(12, 2)
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  template    EstimateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, order])
 }

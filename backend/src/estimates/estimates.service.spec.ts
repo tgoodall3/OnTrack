@@ -2,6 +2,8 @@ import { Test } from '@nestjs/testing';
 import { EstimateStatus, JobStatus, LeadStage } from '@prisma/client';
 import { EstimatesService } from './estimates.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestContextService } from '../context/request-context.service';
+import { EstimateMailerService } from './estimate-mailer.service';
 
 describe('EstimatesService', () => {
   let service: EstimatesService;
@@ -10,12 +12,25 @@ describe('EstimatesService', () => {
       findMany: jest.Mock;
     };
   };
+  let requestContext: Pick<
+    RequestContextService,
+    'context' | 'setTenantId' | 'setUser'
+  >;
 
   beforeEach(async () => {
     prisma = {
       estimate: {
         findMany: jest.fn(),
       },
+    };
+    requestContext = {
+      context: {
+        requestId: 'req-1',
+        tenantId: 'tenant_1',
+        userId: 'user_1',
+      },
+      setTenantId: jest.fn(),
+      setUser: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -24,6 +39,16 @@ describe('EstimatesService', () => {
         {
           provide: PrismaService,
           useValue: prisma,
+        },
+        {
+          provide: RequestContextService,
+          useValue: requestContext,
+        },
+        {
+          provide: EstimateMailerService,
+          useValue: {
+            sendEstimateEmail: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -63,6 +88,10 @@ describe('EstimatesService', () => {
           status: JobStatus.SCHEDULED,
           scheduledStart: new Date('2025-11-02T12:00:00Z'),
         },
+        template: {
+          id: 'tmpl_1',
+          name: 'Standard Deck',
+        },
       },
     ]);
 
@@ -80,6 +109,10 @@ describe('EstimatesService', () => {
         job: expect.objectContaining({
           id: 'job_1',
         }),
+        template: {
+          id: 'tmpl_1',
+          name: 'Standard Deck',
+        },
       }),
     ]);
   });

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useEstimateTemplates } from "@/hooks/use-estimate-templates";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -42,6 +43,7 @@ type EstimateInput = {
   status: EstimateStatus;
   notes?: string | null;
   expiresAt?: string | null;
+  templateId?: string;
   lineItems: Array<{
     description: string;
     quantity: number;
@@ -107,6 +109,9 @@ export default function NewEstimatePage() {
     queryKey: ["leads", "estimate-create"],
     queryFn: fetchLeads,
   });
+  const { data: templatesData, isLoading: templatesLoading, error: templatesError } = useEstimateTemplates();
+  const templates = templatesData ?? [];
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
   const [leadId, setLeadId] = useState(prefilledLeadId);
   const [status, setStatus] = useState<EstimateStatus>("DRAFT");
@@ -115,11 +120,35 @@ export default function NewEstimatePage() {
   const [lineItems, setLineItems] = useState<LineItemDraft[]>([createBlankLineItem()]);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === selectedTemplateId),
+    [templates, selectedTemplateId],
+  );
+
   useEffect(() => {
     if (prefilledLeadId) {
       setLeadId(prefilledLeadId);
     }
   }, [prefilledLeadId]);
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+
+    setLineItems(
+      selectedTemplate.items.map((item) => {
+        const blank = createBlankLineItem();
+        return {
+          ...blank,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        };
+      }),
+    );
+    setFormError(null);
+  }, [selectedTemplate]);
 
   const availableLeads = leads ?? [];
   const hasLeadSelected = leadId.trim().length > 0;
@@ -204,6 +233,7 @@ export default function NewEstimatePage() {
     mutation.mutate({
       leadId,
       status,
+      templateId: selectedTemplate ? selectedTemplate.id : undefined,
       notes: notes.trim().length ? notes.trim() : undefined,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       lineItems: normalizedLineItems,
@@ -289,6 +319,48 @@ export default function NewEstimatePage() {
               placeholder="Optional terms or internal reminders"
             />
           </label>
+        </section>
+
+        <section className="space-y-3 rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+          <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide">
+            Template
+            <select
+              value={selectedTemplateId}
+              onChange={(event) => setSelectedTemplateId(event.target.value)}
+              className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:opacity-60"
+              disabled={templatesLoading}
+            >
+              <option value="">Manual entry</option>
+              {templates
+                .filter((template) => !template.isArchived)
+                .map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {templatesError && (
+            <p className="text-xs text-accent">{templatesError.message}</p>
+          )}
+          {selectedTemplate && (
+            <div className="space-y-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+              {selectedTemplate.description && <p>{selectedTemplate.description}</p>}
+              <ul className="space-y-1">
+                {selectedTemplate.items.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between gap-2 rounded border border-border/60 bg-background px-2 py-1">
+                    <span className="truncate text-muted-foreground">{item.description}</span>
+                    <span className="text-muted-foreground/80">
+                      {item.quantity} × ${item.unitPrice.toFixed(2)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-muted-foreground/60">
+                Adjust any line items below after loading the template.
+              </p>
+            </div>
+          )}
         </section>
 
         <section className="space-y-3 rounded-2xl border border-border/70 bg-muted/30 p-4">

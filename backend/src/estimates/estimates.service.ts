@@ -27,6 +27,12 @@ type EstimateWithRelations = Prisma.EstimateGetPayload<{
         scheduledStart: true;
       };
     };
+    template: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
   };
 }>;
 
@@ -53,6 +59,10 @@ export interface EstimateSummary {
     unitPrice: number;
     total: number;
   }>;
+  template?: {
+    id: string;
+    name: string;
+  } | null;
   approvals: number;
   latestApproval: EstimateApprovalSnapshot | null;
   approvalHistory: EstimateApprovalSnapshot[];
@@ -140,6 +150,7 @@ export class EstimatesService {
             scheduledStart: true,
           },
         },
+        template: { select: { id: true, name: true } },
       },
     });
 
@@ -166,6 +177,7 @@ export class EstimatesService {
             scheduledStart: true,
           },
         },
+        template: { select: { id: true, name: true } },
       },
     });
 
@@ -177,20 +189,57 @@ export class EstimatesService {
   }
 
   async create(dto: CreateEstimateDto): Promise<EstimateSummary> {
-    if (!dto.lineItems?.length) {
-      throw new BadRequestException('At least one line item is required');
-    }
-
     const tenantId = this.prisma.getTenantIdOrThrow();
     const number = dto.number ?? this.generateEstimateNumber();
 
-    const totals = calculateTotals(dto.lineItems);
+    let template:
+      | Prisma.EstimateTemplateGetPayload<{
+          include: { items: { orderBy: { order: 'asc' } } };
+        }>
+      | null = null;
+
+    if (dto.templateId) {
+      template = await this.prisma.estimateTemplate.findFirst({
+        where: {
+          id: dto.templateId,
+          tenantId,
+          isArchived: false,
+        },
+        include: {
+          items: { orderBy: { order: 'asc' } },
+        },
+      });
+
+      if (!template) {
+        throw new BadRequestException('Estimate template not found');
+      }
+    }
+
+    const manualLineItems = dto.lineItems ?? [];
+    let lineItems = manualLineItems;
+
+    if (!manualLineItems.length && template) {
+      lineItems = template.items.map((item) => ({
+        description: item.description,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+      }));
+    }
+
+    if (!lineItems.length) {
+      throw new BadRequestException(
+        'At least one line item or a valid template is required',
+      );
+    }
+
+    const totals = calculateTotals(lineItems);
 
     const estimate = await this.prisma.estimate.create({
       data: {
         tenant: { connect: { id: tenantId } },
         lead: { connect: { id: dto.leadId } },
         number,
+        template: template ? { connect: { id: template.id } } : undefined,
         status: dto.status ?? EstimateStatus.DRAFT,
         subtotal: totals.subtotal,
         tax: totals.tax,
@@ -198,7 +247,7 @@ export class EstimatesService {
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         notes: dto.notes,
         lineItems: {
-          create: dto.lineItems.map((item) => ({
+          create: lineItems.map((item) => ({
             description: item.description,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
@@ -222,19 +271,20 @@ export class EstimatesService {
             scheduledStart: true,
           },
         },
+        template: { select: { id: true, name: true } },
       },
     });
 
     await this.logLeadActivity(tenantId, dto.leadId, 'lead.estimate_created', {
       estimateId: estimate.id,
       status: estimate.status,
+      templateId: template?.id ?? null,
     });
 
     return this.toSummary(estimate);
   }
 
   async update(id: string, dto: UpdateEstimateDto): Promise<EstimateSummary> {
-    const data: Prisma.EstimateUpdateInput = {};
     const tenantId = this.prisma.getTenantIdOrThrow();
 
     const existing = await this.prisma.estimate.findUnique({
@@ -242,6 +292,7 @@ export class EstimatesService {
       select: {
         status: true,
         leadId: true,
+        templateId: true,
       },
     });
 
@@ -249,23 +300,77 @@ export class EstimatesService {
       throw new BadRequestException('Estimate not found');
     }
 
-    if (dto.status) data.status = dto.status;
+    const data: Prisma.EstimateUpdateInput = {};
+    let template:
+      | Prisma.EstimateTemplateGetPayload<{
+          include: { items: { orderBy: { order: 'asc' } } };
+        }>
+      | null = null;
+
+    if (dto.templateId !== undefined) {
+      const trimmed = dto.templateId.trim();
+      if (trimmed.length > 0) {
+        template = await this.prisma.estimateTemplate.findFirst({
+          where: { id: trimmed, tenantId, isArchived: false },
+          include: { items: { orderBy: { order: 'asc' } } },
+        });
+
+        if (!template) {
+          throw new BadRequestException('Estimate template not found');
+        }
+
+        data.template = { connect: { id: template.id } };
+      } else {
+        data.template = { disconnect: true };
+      }
+    }
+
+    if (dto.status) {
+      data.status = dto.status;
+    }
+
     if (dto.expiresAt !== undefined) {
       data.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
     }
-    if (dto.notes !== undefined) data.notes = dto.notes;
+
+    if (dto.notes !== undefined) {
+      data.notes = dto.notes;
+    }
+
+    let replacementLineItems:
+      | Array<{
+          description: string;
+          quantity: number;
+          unitPrice: number;
+        }>
+      | undefined;
 
     if (dto.lineItems) {
       if (!dto.lineItems.length) {
         throw new BadRequestException('Line items cannot be empty');
       }
-      const totals = calculateTotals(dto.lineItems);
+
+      replacementLineItems = dto.lineItems.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      }));
+    } else if (template) {
+      replacementLineItems = template.items.map((item) => ({
+        description: item.description,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+      }));
+    }
+
+    if (replacementLineItems) {
+      const totals = calculateTotals(replacementLineItems);
       data.subtotal = totals.subtotal;
       data.tax = totals.tax;
       data.total = totals.total;
       data.lineItems = {
         deleteMany: {},
-        create: dto.lineItems.map((item) => ({
+        create: replacementLineItems.map((item) => ({
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -293,24 +398,32 @@ export class EstimatesService {
             scheduledStart: true,
           },
         },
+        template: { select: { id: true, name: true } },
       },
     });
 
     const leadId = estimate.lead.id ?? existing.leadId;
     if (leadId) {
       if (dto.status && dto.status !== existing.status) {
-        await this.logLeadActivity(tenantId, leadId, 'lead.estimate_status_updated', {
-          estimateId: estimate.id,
-          from: existing.status,
-          to: dto.status,
-        });
+        await this.logLeadActivity(
+          tenantId,
+          leadId,
+          'lead.estimate_status_updated',
+          {
+            estimateId: estimate.id,
+            from: existing.status,
+            to: dto.status,
+          },
+        );
       } else if (
         dto.notes !== undefined ||
         dto.lineItems ||
-        dto.expiresAt !== undefined
+        dto.expiresAt !== undefined ||
+        dto.templateId !== undefined
       ) {
         await this.logLeadActivity(tenantId, leadId, 'lead.estimate_updated', {
           estimateId: estimate.id,
+          templateId: estimate.template?.id ?? null,
         });
       }
     }
@@ -326,17 +439,14 @@ export class EstimatesService {
 
   async send(id: string, dto: SendEstimateDto): Promise<EstimateSummary> {
     const tenantId = this.prisma.getTenantIdOrThrow();
+
     const estimate = await this.prisma.estimate.findFirst({
       where: { id, tenantId },
       include: {
         lead: {
           select: {
             id: true,
-            contact: {
-              select: {
-                name: true,
-              },
-            },
+            contact: { select: { name: true } },
           },
         },
         lineItems: true,
@@ -408,6 +518,7 @@ export class EstimatesService {
 
   async approve(id: string, dto: ApproveEstimateDto): Promise<EstimateSummary> {
     const tenantId = this.prisma.getTenantIdOrThrow();
+
     const estimate = await this.prisma.estimate.findFirst({
       where: { id, tenantId },
       include: {
@@ -445,12 +556,17 @@ export class EstimatesService {
       });
     });
 
-    await this.logLeadActivity(tenantId, estimate.lead.id, 'lead.estimate_approved', {
-      estimateId: id,
-      status: EstimateStatus.APPROVED,
-      approverName: dto.approverName,
-      approverEmail: dto.approverEmail ?? null,
-    });
+    await this.logLeadActivity(
+      tenantId,
+      estimate.lead.id,
+      'lead.estimate_approved',
+      {
+        estimateId: id,
+        status: EstimateStatus.APPROVED,
+        approverName: dto.approverName,
+        approverEmail: dto.approverEmail ?? null,
+      },
+    );
 
     return this.getSummaryById(id, tenantId);
   }
@@ -482,6 +598,12 @@ export class EstimatesService {
         unitPrice: Number(item.unitPrice),
         total: Number(item.quantity) * Number(item.unitPrice),
       })),
+      template: estimate.template
+        ? {
+            id: estimate.template.id,
+            name: estimate.template.name,
+          }
+        : null,
       approvals: estimate.approvals.length,
       latestApproval,
       approvalHistory,
@@ -502,9 +624,7 @@ export class EstimatesService {
       .map((approval) => {
         const signature = this.toRecord(approval.signature);
         const timestamp = this.resolveApprovalTimestamp(approval);
-        const createdAtIso = new Date(
-          timestamp || Date.now(),
-        ).toISOString();
+        const createdAtIso = new Date(timestamp || Date.now()).toISOString();
 
         return {
           id: approval.id,
@@ -548,6 +668,7 @@ export class EstimatesService {
     if (approval.approvedAt) {
       return approval.approvedAt.getTime();
     }
+
     const signature = this.toRecord(approval.signature);
     if (signature?.sentAt) {
       const parsed = Date.parse(String(signature.sentAt));
@@ -555,12 +676,14 @@ export class EstimatesService {
         return parsed;
       }
     }
+
     if (signature?.approvedAt) {
       const parsed = Date.parse(String(signature.approvedAt));
       if (!Number.isNaN(parsed)) {
         return parsed;
       }
     }
+
     return 0;
   }
 
@@ -587,6 +710,7 @@ export class EstimatesService {
             scheduledStart: true,
           },
         },
+        template: { select: { id: true, name: true } },
       },
     });
 
@@ -598,10 +722,7 @@ export class EstimatesService {
   }
 
   private generateEstimateNumber(): string {
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[-:T.Z]/g, '')
-      .slice(0, 12);
+    const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 12);
     return `EST-${timestamp}`;
   }
 
@@ -625,14 +746,18 @@ export class EstimatesService {
   }
 }
 
-function calculateTotals(
+export function calculateTotals(
   items: Array<{ quantity: number; unitPrice: number }>,
-): { subtotal: Prisma.Decimal; tax: Prisma.Decimal; total: Prisma.Decimal } {
+): {
+  subtotal: Prisma.Decimal;
+  tax: Prisma.Decimal;
+  total: Prisma.Decimal;
+} {
   const subtotal = items.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
     0,
   );
-  const tax = subtotal * 0.0825; // placeholder 8.25% tax, will be configurable
+  const tax = subtotal * 0.0825; // TODO: expose configurable tax rate
   const total = subtotal + tax;
 
   return {
@@ -641,4 +766,3 @@ function calculateTotals(
     total: new Prisma.Decimal(total),
   };
 }
-

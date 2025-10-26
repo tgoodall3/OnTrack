@@ -124,6 +124,8 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'Estimate',
   'EstimateApproval',
   'EstimateLineItem',
+  'EstimateTemplate',
+  'EstimateTemplateItem',
   'File',
   'Invoice',
   'Job',

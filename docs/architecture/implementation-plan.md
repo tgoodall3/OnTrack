@@ -28,10 +28,13 @@
 
 ## Phase 2 — Core Domain (Weeks 4–6)
 - Implement Contacts & Leads CRUD, pipeline stages, CSV import, public lead form.
+  - Admins can upload CSV files (name, email, phone, source, notes, stage) for batch creation with error summaries.
+  - Public share link `/public/{tenant}/lead` posts directly into the pipeline with throttled submissions.
 - Build Estimate authoring (line items, taxes/discounts, templating, PDF, e-signature).
   - `/estimates/new` route delivers draft authoring with line items, status, notes (Phase 2 baseline).
   - `/estimates/[id]` detail exposes status transitions and job conversion workflow.
   - Send + approval flows capture recipient metadata, log activity, and unlock job scheduling.
+  - Template library delivers `estimate_templates` + `estimate_template_items`, CRUD/apply endpoints, and UI to load, reapply, or clear templates in both the creator and detail flows with activity logging.
 - Convert Estimates → Jobs; scheduling scaffolding; job status transitions.
   - Estimate detail now enforces approval-first scheduling, adds resend/record guardrails, and surfaces inline scheduling errors.
   - Lead detail CTAs deep-link into the builder and freshly created estimates redirect to their detail view for conversion.

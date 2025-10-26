@@ -50,6 +50,13 @@ export interface LeadActivityEntry {
   meta?: Prisma.JsonValue | null;
 }
 
+export interface LeadImportResult {
+  created: number;
+  failed: number;
+  errors: Array<{ row: number; error: string }>;
+  leads: LeadSummary[];
+}
+
 @Injectable()
 export class LeadsService {
   constructor(
@@ -112,11 +119,17 @@ export class LeadsService {
   }
 
   async create(dto: CreateLeadDto): Promise<LeadSummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    return this.createForTenant(tenantId, dto);
+  }
+
+  async createForTenant(
+    tenantId: string,
+    dto: CreateLeadDto,
+  ): Promise<LeadSummary> {
     if (!dto.contactId && !dto.contact) {
       throw new BadRequestException('Contact information is required');
     }
-
-    const tenantId = this.prisma.getTenantIdOrThrow();
 
     const contactRelation = dto.contactId
       ? { connect: { id: dto.contactId } }
@@ -171,6 +184,88 @@ export class LeadsService {
     });
 
     return this.toSummary(lead);
+  }
+
+  async importFromCsv(
+    csvContent: string,
+    defaultStage?: LeadStage,
+  ): Promise<LeadImportResult> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const { headers, records } = parseCsvContent(csvContent);
+
+    if (!headers.includes('name')) {
+      throw new BadRequestException('CSV is missing required "name" column');
+    }
+
+    const createdLeads: LeadSummary[] = [];
+    const errors: Array<{ row: number; error: string }> = [];
+
+    for (const record of records) {
+      try {
+        const name = record.values['name']?.trim();
+        if (!name) {
+          throw new BadRequestException('Contact name is required');
+        }
+
+        const stageValue = record.values['stage'];
+        const resolvedStage =
+          coerceStage(stageValue) ??
+          (defaultStage ? coerceStage(defaultStage) : undefined);
+
+        const dto: CreateLeadDto = {
+          contact: {
+            name,
+            email: optional(record.values['email']),
+            phone: optional(record.values['phone']),
+          },
+          source: optional(record.values['source']),
+          notes: optional(record.values['notes']),
+        };
+
+        if (resolvedStage) {
+          dto.stage = resolvedStage;
+        }
+
+        const propertyLine1 =
+          optional(record.values['property_line1']) ??
+          optional(record.values['address_line1']);
+        if (propertyLine1) {
+          dto.propertyAddress = {
+            line1: propertyLine1,
+            line2:
+              optional(record.values['property_line2']) ??
+              optional(record.values['address_line2']),
+            city:
+              optional(record.values['property_city']) ??
+              optional(record.values['city']),
+            state:
+              optional(record.values['property_state']) ??
+              optional(record.values['state']),
+            postalCode:
+              optional(record.values['property_postal_code']) ??
+              optional(record.values['postal_code']),
+          };
+        }
+
+        const summary = await this.createForTenant(tenantId, dto);
+        createdLeads.push(summary);
+      } catch (error) {
+        errors.push({
+          row: record.rowNumber,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Unknown error while importing row',
+        });
+      }
+    }
+
+    return {
+      created: createdLeads.length,
+      failed: errors.length,
+      errors,
+      leads: createdLeads,
+    };
   }
 
   async update(id: string, dto: UpdateLeadDto): Promise<LeadSummary> {
@@ -317,6 +412,106 @@ export class LeadsService {
       },
     });
   }
+}
+
+function parseCsvContent(content: string): {
+  headers: string[];
+  records: Array<{ rowNumber: number; values: Record<string, string> }>;
+} {
+  const rawLines = content
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+
+  if (rawLines.length === 0) {
+    return { headers: [], records: [] };
+  }
+
+  const headers = splitCsvLine(rawLines[0]).map((header) =>
+    header.trim().toLowerCase(),
+  );
+
+  const records = rawLines.slice(1).flatMap((line, index) => {
+    const cells = splitCsvLine(line);
+    const values: Record<string, string> = {};
+    let hasValue = false;
+
+    headers.forEach((header, columnIndex) => {
+      const cell = cells[columnIndex] ?? '';
+      if (cell.trim().length > 0) {
+        hasValue = true;
+      }
+      values[header] = cell;
+    });
+
+    if (!hasValue) {
+      return [];
+    }
+
+    return [
+      {
+        rowNumber: index + 2,
+        values,
+      },
+    ];
+  });
+
+  return { headers, records };
+}
+
+function splitCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+
+    if (char === '"') {
+      const nextChar = line[i + 1];
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  result.push(current);
+  return result;
+}
+
+function optional(value?: string | null): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function coerceStage(value?: string | LeadStage | null): LeadStage | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.toString().trim().toUpperCase();
+  if (!normalized.length) {
+    return undefined;
+  }
+
+  return (Object.values(LeadStage) as string[]).includes(normalized)
+    ? (normalized as LeadStage)
+    : undefined;
 }
 
 function formatAddress(address: Prisma.JsonValue | null): string {
