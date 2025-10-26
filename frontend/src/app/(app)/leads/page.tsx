@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Loader2, MapPin, Plus, Trash2, Users } from "lucide-react";
+import { CalendarClock, Loader2, MapPin, Trash2, Users } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -92,6 +94,7 @@ export default function LeadsPage() {
   const [propertiesLoading, setPropertiesLoading] = useState(false);
   const [useExistingProperty, setUseExistingProperty] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const { toast } = useToast();
 
   const hasPropertyInput = useMemo(() => {
     if (useExistingProperty) return false;
@@ -135,19 +138,19 @@ export default function LeadsPage() {
       if (!contactsResponse.ok) {
         throw new Error(`Contacts fetch failed: ${contactsResponse.status}`);
       }
-
       if (!propertiesResponse.ok) {
         throw new Error(`Properties fetch failed: ${propertiesResponse.status}`);
       }
 
-      const contactsPayload: ContactOption[] = await contactsResponse.json();
-      const propertiesPayload: PropertyOption[] = await propertiesResponse.json();
+      const [contactsPayload, propertiesPayload] = await Promise.all([
+        contactsResponse.json(),
+        propertiesResponse.json(),
+      ]);
 
       setContacts(contactsPayload);
       setProperties(propertiesPayload);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to load lookup data";
-      setLookupError(message);
+      setLookupError(err instanceof Error ? err.message : "Failed to load lookups.");
     } finally {
       setContactsLoading(false);
       setPropertiesLoading(false);
@@ -157,6 +160,7 @@ export default function LeadsPage() {
   async function loadLeads() {
     setLoading(true);
     setError(null);
+
     try {
       const response = await fetch(`${API_BASE_URL}/leads`, {
         headers: {
@@ -173,85 +177,9 @@ export default function LeadsPage() {
       const payload: LeadSummary[] = await response.json();
       setLeads(payload);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to load leads";
-      setError(message);
+      setError(err instanceof Error ? err.message : "Failed to load leads.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  function updateForm<K extends keyof CreateLeadFormState>(key: K, value: CreateLeadFormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  async function handleCreateLead(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setFormError(null);
-
-    try {
-      const payload: Record<string, unknown> = {
-        stage: form.stage,
-        source: emptyToUndefined(form.source),
-        notes: emptyToUndefined(form.notes),
-      };
-
-      if (useExistingContact) {
-        if (!selectedContactId) {
-          throw new Error("Select a contact or add a new one");
-        }
-        payload.contactId = selectedContactId;
-      } else {
-        if (!form.contactName.trim()) {
-          throw new Error("Contact name is required");
-        }
-        payload.contact = {
-          name: form.contactName.trim(),
-          email: emptyToUndefined(form.contactEmail),
-          phone: emptyToUndefined(form.contactPhone),
-        };
-      }
-
-      if (useExistingProperty) {
-        if (!selectedPropertyId) {
-          throw new Error("Select a property or provide an address");
-        }
-        payload.propertyId = selectedPropertyId;
-      } else if (hasPropertyInput) {
-        payload.propertyAddress = {
-          line1: form.propertyLine1.trim(),
-          line2: emptyToUndefined(form.propertyLine2),
-          city: emptyToUndefined(form.propertyCity),
-          state: emptyToUndefined(form.propertyState),
-          postalCode: emptyToUndefined(form.propertyPostalCode),
-        };
-      }
-
-      const response = await fetch(`${API_BASE_URL}/leads`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Tenant-ID": TENANT_HEADER,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Create lead failed: ${response.status}`);
-      }
-
-      setForm(INITIAL_FORM);
-      setUseExistingContact(false);
-      setSelectedContactId("");
-      setUseExistingProperty(false);
-      setSelectedPropertyId("");
-      await loadLeads();
-      await loadLookups();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to create lead";
-      setFormError(message);
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -268,13 +196,18 @@ export default function LeadsPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`Update failed: ${response.status}`);
+        throw new Error(`Failed to update lead: ${response.status}`);
       }
 
-      await loadLeads();
+      const updated = await response.json();
+      setLeads((prev) => prev.map((lead) => (lead.id === id ? updated : lead)));
+      toast({
+        variant: "success",
+        title: "Stage updated",
+        description: `Lead moved to ${stage.replace("_", " ").toLowerCase()}.`,
+      });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to update lead";
-      setError(message);
+      setError(err instanceof Error ? err.message : "Failed to update lead stage.");
     } finally {
       setUpdatingId(null);
     }
@@ -286,240 +219,285 @@ export default function LeadsPage() {
       const response = await fetch(`${API_BASE_URL}/leads/${id}`, {
         method: "DELETE",
         headers: {
+          "Content-Type": "application/json",
           "X-Tenant-ID": TENANT_HEADER,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Delete failed: ${response.status}`);
+        throw new Error(`Failed to delete lead: ${response.status}`);
       }
 
-      await loadLeads();
+      setLeads((prev) => prev.filter((lead) => lead.id !== id));
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to delete lead";
-      setError(message);
+      setError(err instanceof Error ? err.message : "Failed to delete lead.");
     } finally {
       setUpdatingId(null);
     }
   }
 
-  return (
-    <div className="space-y-8">
-      <section className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Leads</h1>
-            <p className="text-sm text-muted-foreground">
-              Capture new opportunities and track progression through the pipeline.
-            </p>
-          </div>
-          <div className="hidden items-center gap-3 text-sm text-muted-foreground sm:flex">
-            <Users className="h-4 w-4 text-primary" />
-            <span>{leads.length} active leads</span>
-          </div>
-        </div>
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
 
-        <form onSubmit={handleCreateLead} className="mt-6 grid gap-4 rounded-2xl border border-dashed border-border/80 bg-muted/40 p-5 sm:grid-cols-2">
-          <div className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <Plus className="h-4 w-4 text-primary" />
-            Add a lead
-          </div>
-          <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                checked={useExistingContact}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setUseExistingContact(checked);
-                  setFormError(null);
-                  if (checked) {
-                    setForm((prev) => ({
-                      ...prev,
-                      contactName: "",
-                      contactEmail: "",
-                      contactPhone: "",
-                    }));
-                  } else {
-                    setSelectedContactId("");
-                  }
-                }}
-              />
-              Use existing contact
-            </label>
-            {useExistingContact && (
-              <select
-                className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-                value={selectedContactId}
-                onChange={(event) => setSelectedContactId(event.target.value)}
-              >
-                <option value="">Select a contact</option>
-                {contacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                    {contact.email ? ` · ${contact.email}` : ""}
-                  </option>
-                ))}
-              </select>
-            )}
-            {contactsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />}
-          </div>
-          {useExistingContact && selectedContactId && (
-            <div className="sm:col-span-2 rounded-2xl bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              {formatContactDetails(contacts.find((contact) => contact.id === selectedContactId))}
-            </div>
-          )}
+    const payload: Record<string, unknown> = {
+      stage: form.stage,
+      source: emptyToUndefined(form.source),
+      notes: emptyToUndefined(form.notes),
+    };
+
+    if (useExistingContact) {
+      if (!selectedContactId) {
+        setFormError("Select an existing contact or enter contact details.");
+        return;
+      }
+      payload.contactId = selectedContactId;
+    } else {
+      if (!form.contactName.trim()) {
+        setFormError("Contact name is required.");
+        return;
+      }
+      payload.contact = {
+        name: form.contactName.trim(),
+        email: emptyToUndefined(form.contactEmail),
+        phone: emptyToUndefined(form.contactPhone),
+      };
+    }
+
+    if (useExistingProperty) {
+      if (!selectedPropertyId) {
+        setFormError("Select an existing property or provide property details.");
+        return;
+      }
+      payload.propertyId = selectedPropertyId;
+    } else if (hasPropertyInput) {
+      payload.propertyAddress = {
+        line1: emptyToUndefined(form.propertyLine1),
+        line2: emptyToUndefined(form.propertyLine2),
+        city: emptyToUndefined(form.propertyCity),
+        state: emptyToUndefined(form.propertyState),
+        postalCode: emptyToUndefined(form.propertyPostalCode),
+      };
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/leads`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create lead: ${response.status}`);
+      }
+
+      const created = await response.json();
+      setLeads((prev) => [created, ...prev]);
+      setForm(INITIAL_FORM);
+      setSelectedContactId("");
+      setSelectedPropertyId("");
+      setUseExistingContact(false);
+      setUseExistingProperty(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to create lead.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Leads</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage inbound opportunities, track their stage, and convert high potential deals into estimates.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-3 rounded-full border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+          <Users className="h-4 w-4 text-primary" />
+          {leads.length} active
+        </div>
+      </header>
+
+      <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/10">
+        <header className="mb-4 flex items-center justify-between">
           <div>
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Contact name</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-              value={form.contactName}
-              onChange={(event) => updateForm("contactName", event.target.value)}
-              placeholder="Jamie Reynolds"
-              required={!useExistingContact}
-              disabled={useExistingContact}
-            />
+            <h2 className="text-lg font-semibold text-foreground">Add lead</h2>
+            <p className="text-sm text-muted-foreground">Capture new opportunities or link existing contacts/properties.</p>
           </div>
-          <div>
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Contact email</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-              type="email"
-              value={form.contactEmail}
-              onChange={(event) => updateForm("contactEmail", event.target.value)}
-              placeholder="jamie@client.com"
-              disabled={useExistingContact}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Contact phone</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-              value={form.contactPhone}
-              onChange={(event) => updateForm("contactPhone", event.target.value)}
-              placeholder="(555) 123-4567"
-              disabled={useExistingContact}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Stage</label>
-            <select
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-              value={form.stage}
-              onChange={(event) => updateForm("stage", event.target.value as LeadStage)}
-            >
-              {LEAD_STAGES.map((stage) => (
-                <option key={stage} value={stage}>
-                  {stage.replace("_", " ")}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Source</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-              value={form.source}
-              onChange={(event) => updateForm("source", event.target.value)}
-              placeholder="Web form, referral, etc."
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Notes</label>
-            <textarea
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-              rows={3}
-              value={form.notes}
-              onChange={(event) => updateForm("notes", event.target.value)}
-              placeholder="Add any intake notes or next steps."
-            />
-          </div>
-          <div className="sm:col-span-2 grid gap-4 rounded-2xl border border-border/60 bg-background/60 p-4">
-            <div className="text-xs font-semibold uppercase text-muted-foreground">Property (optional)</div>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <label className="flex items-center gap-2 font-semibold text-muted-foreground">
+        </header>
+
+        <form className="space-y-4 text-sm text-muted-foreground" onSubmit={handleSubmit}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <fieldset className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contact</legend>
+
+              <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  checked={useExistingProperty}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setUseExistingProperty(checked);
-                    setFormError(null);
-                    if (!checked) {
-                      setSelectedPropertyId("");
-                    }
-                  }}
+                  checked={useExistingContact}
+                  onChange={(event) => setUseExistingContact(event.target.checked)}
                 />
-                Use existing property
+                Use existing contact
               </label>
-              {useExistingProperty && (
+
+              {useExistingContact ? (
                 <select
-                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-                  value={selectedPropertyId}
-                  onChange={(event) => setSelectedPropertyId(event.target.value)}
+                  value={selectedContactId}
+                  onChange={(event) => setSelectedContactId(event.target.value)}
+                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  disabled={contactsLoading}
                 >
-                  <option value="">Select a property</option>
-                  {properties.map((property) => (
-                    <option key={property.id} value={property.id}>
-                      {property.address}
-                      {property.contactName ? ` · ${property.contactName}` : ""}
+                  <option value="">Select contact…</option>
+                  {contacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {formatContactDetails(contact)}
                     </option>
                   ))}
                 </select>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={form.contactName}
+                    onChange={(event) => setForm((prev) => ({ ...prev, contactName: event.target.value }))}
+                    placeholder="Contact name"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                    required
+                  />
+                  <input
+                    type="email"
+                    value={form.contactEmail}
+                    onChange={(event) => setForm((prev) => ({ ...prev, contactEmail: event.target.value }))}
+                    placeholder="Email"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  />
+                  <input
+                    type="tel"
+                    value={form.contactPhone}
+                    onChange={(event) => setForm((prev) => ({ ...prev, contactPhone: event.target.value }))}
+                    placeholder="Phone"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  />
+                </div>
               )}
-              {(propertiesLoading || contactsLoading) && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+            </fieldset>
+
+            <fieldset className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Property</legend>
+
+              <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+                <input
+                  type="checkbox"
+                  checked={useExistingProperty}
+                  onChange={(event) => setUseExistingProperty(event.target.checked)}
+                />
+                Use existing property
+              </label>
+
+              {useExistingProperty ? (
+                <select
+                  value={selectedPropertyId}
+                  onChange={(event) => setSelectedPropertyId(event.target.value)}
+                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  disabled={propertiesLoading}
+                >
+                  <option value="">Select property…</option>
+                  {properties.map((property) => (
+                    <option key={property.id} value={property.id}>
+                      {formatPropertyDetails(property)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={form.propertyLine1}
+                    onChange={(event) => setForm((prev) => ({ ...prev, propertyLine1: event.target.value }))}
+                    placeholder="Address line 1"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={form.propertyLine2}
+                    onChange={(event) => setForm((prev) => ({ ...prev, propertyLine2: event.target.value }))}
+                    placeholder="Address line 2"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input
+                      type="text"
+                      value={form.propertyCity}
+                      onChange={(event) => setForm((prev) => ({ ...prev, propertyCity: event.target.value }))}
+                      placeholder="City"
+                      className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={form.propertyState}
+                      onChange={(event) => setForm((prev) => ({ ...prev, propertyState: event.target.value }))}
+                      placeholder="State"
+                      className="w-full rounded border border-border	bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={form.propertyPostalCode}
+                    onChange={(event) => setForm((prev) => ({ ...prev, propertyPostalCode: event.target.value }))}
+                    placeholder="Postal code"
+                    className="w-full rounded border	border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  />
+                </div>
               )}
+            </fieldset>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stage</label>
+              <select
+                value={form.stage}
+                onChange={(event) => setForm((prev) => ({ ...prev, stage: event.target.value as LeadStage }))}
+                className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+              >
+                {LEAD_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stage.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
             </div>
-            {useExistingProperty && selectedPropertyId && (
-              <div className="rounded-2xl bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                {formatPropertyDetails(properties.find((property) => property.id === selectedPropertyId))}
-              </div>
-            )}
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Source</label>
               <input
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-                placeholder="Street address"
-                value={form.propertyLine1}
-                onChange={(event) => updateForm("propertyLine1", event.target.value)}
-                disabled={useExistingProperty}
+                type="text"
+                value={form.source}
+                onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))}
+                placeholder="Referral, ad campaign, etc."
+                className="w-full rounded border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
-              <input
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-                placeholder="Unit / Suite"
-                value={form.propertyLine2}
-                onChange={(event) => updateForm("propertyLine2", event.target.value)}
-                disabled={useExistingProperty}
-              />
-              <input
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-                placeholder="City"
-                value={form.propertyCity}
-                onChange={(event) => updateForm("propertyCity", event.target.value)}
-                disabled={useExistingProperty}
-              />
-              <div className="flex gap-3">
-                <input
-                  className="w-1/2 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-                  placeholder="State"
-                  value={form.propertyState}
-                  onChange={(event) => updateForm("propertyState", event.target.value)}
-                  disabled={useExistingProperty}
-                />
-                <input
-                  className="w-1/2 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
-                  placeholder="ZIP"
-                  value={form.propertyPostalCode}
-                  onChange={(event) => updateForm("propertyPostalCode", event.target.value)}
-                  disabled={useExistingProperty}
-                />
-              </div>
             </div>
           </div>
-          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3">
-            {formError && <p className="text-sm text-accent">{formError}</p>}
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
+            <textarea
+              value={form.notes}
+              onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
+              placeholder="Background details, next steps, client preferences..."
+              className="min-h-[120px] w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          {formError && <p className="text-sm text-accent">{formError}</p>}
+
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
               className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
@@ -561,7 +539,11 @@ export default function LeadsPage() {
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-lg font-semibold text-foreground">{lead.contact.name}</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    <Link href={`/leads/${lead.id}`} className="transition hover:text-primary">
+                      {lead.contact.name}
+                    </Link>
+                  </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     {lead.contact.email && <span>{lead.contact.email}</span>}
                     {lead.contact.phone && <span>• {lead.contact.phone}</span>}
@@ -611,6 +593,12 @@ export default function LeadsPage() {
                 <span className="inline-flex items-center gap-2 rounded-full bg-muted/70 px-3 py-1 font-medium">
                   Jobs {lead.metrics.jobs}
                 </span>
+                <Link
+                  href={`/leads/${lead.id}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
+                >
+                  View details
+                </Link>
               </div>
               {lead.notes && (
                 <p className="mt-4 rounded-2xl bg-muted/40 px-4 py-3 text-sm text-muted-foreground">{lead.notes}</p>

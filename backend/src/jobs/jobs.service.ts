@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { JobStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestContextService } from '../context/request-context.service';
 import { ListJobsDto } from './dto/list-jobs.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
@@ -58,7 +59,10 @@ export interface JobSummary {
 
 @Injectable()
 export class JobsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   async list(params: ListJobsDto): Promise<JobSummary[]> {
     const where: Prisma.JobWhereInput = {};
@@ -223,6 +227,12 @@ export class JobsService {
       },
     });
 
+    await this.logLeadActivity(tenantId, leadId, 'lead.job_created', {
+      jobId: job.id,
+      status: job.status,
+      estimateId: dto.estimateId ?? undefined,
+    });
+
     return this.toSummary(job);
   }
 
@@ -279,6 +289,25 @@ export class JobsService {
   async remove(id: string): Promise<void> {
     await this.prisma.job.delete({
       where: { id },
+    });
+  }
+
+  private async logLeadActivity(
+    tenantId: string,
+    leadId: string,
+    action: string,
+    meta?: Record<string, unknown>,
+  ) {
+    const actorId = this.requestContext.context.userId;
+    await this.prisma.activityLog.create({
+      data: {
+        tenantId,
+        actorId,
+        action,
+        entityType: 'lead',
+        entityId: leadId,
+        meta: meta ? (meta as Prisma.JsonValue) : undefined,
+      },
     });
   }
 

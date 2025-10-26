@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
+import { RequestContextService } from '../context/request-context.service';
 
 type LeadWithRelations = Prisma.LeadGetPayload<{
   include: {
@@ -37,9 +38,24 @@ export interface LeadSummary {
   };
 }
 
+export interface LeadActivityEntry {
+  id: string;
+  action: string;
+  createdAt: string;
+  actor?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  };
+  meta?: Prisma.JsonValue | null;
+}
+
 @Injectable()
 export class LeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   async list(params: ListLeadsDto): Promise<LeadSummary[]> {
     const take = params.take ?? 25;
@@ -149,11 +165,29 @@ export class LeadsService {
       },
     });
 
+    await this.logActivity(tenantId, lead.id, 'lead.created', {
+      stage: lead.stage,
+      source: lead.source ?? undefined,
+    });
+
     return this.toSummary(lead);
   }
 
   async update(id: string, dto: UpdateLeadDto): Promise<LeadSummary> {
     const data: Prisma.LeadUpdateInput = {};
+    const tenantId = this.prisma.getTenantIdOrThrow();
+
+    const existing = await this.prisma.lead.findUnique({
+      where: { id },
+      select: {
+        stage: true,
+        notes: true,
+      },
+    });
+
+    if (!existing) {
+      throw new BadRequestException('Lead not found');
+    }
 
     if (dto.stage) data.stage = dto.stage;
     if (dto.source !== undefined) data.source = dto.source;
@@ -178,13 +212,64 @@ export class LeadsService {
       },
     });
 
+    if (dto.stage && dto.stage !== existing.stage) {
+      await this.logActivity(tenantId, id, 'lead.stage_updated', {
+        from: existing.stage,
+        to: dto.stage,
+      });
+    }
+
+    if (dto.notes !== undefined && dto.notes !== existing.notes) {
+      await this.logActivity(tenantId, id, 'lead.notes_updated', {
+        changed: true,
+      });
+    }
+
     return this.toSummary(lead);
   }
 
   async remove(id: string): Promise<void> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
     await this.prisma.lead.delete({
       where: { id },
     });
+    await this.logActivity(tenantId, id, 'lead.deleted');
+  }
+
+  async activity(id: string): Promise<LeadActivityEntry[]> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const logs = await this.prisma.activityLog.findMany({
+      where: {
+        tenantId,
+        entityType: 'lead',
+        entityId: id,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+      include: {
+        actor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return logs.map((log) => ({
+      id: log.id,
+      action: log.action,
+      createdAt: log.createdAt.toISOString(),
+      actor: log.actor
+        ? {
+            id: log.actor.id,
+            name: log.actor.name,
+            email: log.actor.email,
+          }
+        : undefined,
+      meta: log.meta ?? null,
+    }));
   }
 
   private toSummary(lead: LeadWithRelations): LeadSummary {
@@ -212,6 +297,25 @@ export class LeadsService {
         jobs: lead.jobs.length,
       },
     };
+  }
+
+  private async logActivity(
+    tenantId: string,
+    leadId: string,
+    action: string,
+    meta?: Record<string, unknown>,
+  ) {
+    const actorId = this.requestContext.context.userId;
+    await this.prisma.activityLog.create({
+      data: {
+        tenantId,
+        actorId,
+        action,
+        entityType: 'lead',
+        entityId: leadId,
+        meta: meta ? (meta as Prisma.JsonValue) : undefined,
+      },
+    });
   }
 }
 

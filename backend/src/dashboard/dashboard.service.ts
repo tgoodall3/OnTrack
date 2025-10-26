@@ -5,6 +5,7 @@ import {
   LeadStage,
   Prisma,
   RoleKey,
+  TaskStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -19,6 +20,8 @@ export interface DashboardMetrics {
     estimatesSent: number;
     approved: number;
     jobsScheduled: number;
+    tasksCompleted: number;
+    tasksPending: number;
     pipelineValue: number;
   };
   nextVisits: Array<{
@@ -67,6 +70,8 @@ export class DashboardService {
       estimatesApproved,
       pipelineTotals,
       jobsScheduled,
+      tasksCompletedCount,
+      tasksPendingCount,
       upcomingJobs,
     ] = await Promise.all([
       this.prisma.job.count({
@@ -162,6 +167,18 @@ export class DashboardService {
           },
         },
       }),
+      this.prisma.task.count({
+        where: {
+          tenantId,
+          status: TaskStatus.COMPLETE,
+        },
+      }),
+      this.prisma.task.count({
+        where: {
+          tenantId,
+          status: { not: TaskStatus.COMPLETE },
+        },
+      }),
       this.prisma.job.findMany({
         where: {
           tenantId,
@@ -237,6 +254,8 @@ export class DashboardService {
         estimatesSent,
         approved: estimatesApproved,
         jobsScheduled,
+        tasksCompleted: tasksCompletedCount,
+        tasksPending: tasksPendingCount,
         pipelineValue,
       },
       nextVisits: upcomingJobs.map((job) => this.toUpcomingVisit(job, now)),

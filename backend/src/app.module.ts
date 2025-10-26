@@ -14,6 +14,8 @@ import { PropertiesModule } from './properties/properties.module';
 import { EstimatesModule } from './estimates/estimates.module';
 import { JobsModule } from './jobs/jobs.module';
 import { TasksModule } from './tasks/tasks.module';
+import { UsersModule } from './users/users.module';
+import { ChecklistsModule } from './checklists/checklists.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { TasksModule } from './tasks/tasks.module';
     EstimatesModule,
     JobsModule,
     TasksModule,
+    UsersModule,
+    ChecklistsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

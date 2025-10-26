@@ -206,29 +206,11 @@ export class EstimatesService {
       },
     });
 
-    await this.logLeadActivity(tenantId, dto.leadId, 'lead.estimate_created', {
-      estimateId: estimate.id,
-      status: estimate.status,
-    });
-
     return this.toSummary(estimate);
   }
 
   async update(id: string, dto: UpdateEstimateDto): Promise<EstimateSummary> {
     const data: Prisma.EstimateUpdateInput = {};
-    const tenantId = this.prisma.getTenantIdOrThrow();
-
-    const existing = await this.prisma.estimate.findUnique({
-      where: { id },
-      select: {
-        status: true,
-        leadId: true,
-      },
-    });
-
-    if (!existing) {
-      throw new BadRequestException('Estimate not found');
-    }
 
     if (dto.status) data.status = dto.status;
     if (dto.expiresAt !== undefined) {
@@ -276,25 +258,6 @@ export class EstimatesService {
         },
       },
     });
-
-    const leadId = estimate.lead.id ?? existing.leadId;
-    if (leadId) {
-      if (dto.status && dto.status !== existing.status) {
-        await this.logLeadActivity(tenantId, leadId, 'lead.estimate_status_updated', {
-          estimateId: estimate.id,
-          from: existing.status,
-          to: dto.status,
-        });
-      } else if (
-        dto.notes !== undefined ||
-        dto.lineItems ||
-        dto.expiresAt !== undefined
-      ) {
-        await this.logLeadActivity(tenantId, leadId, 'lead.estimate_updated', {
-          estimateId: estimate.id,
-        });
-      }
-    }
 
     return this.toSummary(estimate);
   }
@@ -347,25 +310,6 @@ export class EstimatesService {
       .slice(0, 12);
     return `EST-${timestamp}`;
   }
-
-  private async logLeadActivity(
-    tenantId: string,
-    leadId: string,
-    action: string,
-    meta?: Record<string, unknown>,
-  ) {
-    const actorId = this.requestContext.context.userId;
-    await this.prisma.activityLog.create({
-      data: {
-        tenantId,
-        actorId,
-        action,
-        entityType: 'lead',
-        entityId: leadId,
-        meta: meta ? (meta as Prisma.JsonValue) : undefined,
-      },
-    });
-  }
 }
 
 function calculateTotals(
@@ -384,3 +328,4 @@ function calculateTotals(
     total: new Prisma.Decimal(total),
   };
 }
+

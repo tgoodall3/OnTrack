@@ -3,6 +3,7 @@
 import {
   BarChart3,
   CalendarCheck,
+  ClipboardCheck,
   ClipboardList,
   CreditCard,
   FolderOpen,
@@ -25,6 +26,7 @@ const NAV_ITEMS: AppNavItem[] = [
   { label: "Leads", href: "/leads", icon: Users },
   { label: "Estimates", href: "/estimates", icon: ClipboardList },
   { label: "Work", href: "/work", icon: ClipboardList },
+  { label: "Checklists", href: "/checklists", icon: ClipboardCheck },
   { label: "Schedule", href: "/schedule", icon: CalendarCheck },
   { label: "Billing", href: "/billing", icon: CreditCard },
   { label: "Files", href: "/files", icon: FolderOpen },

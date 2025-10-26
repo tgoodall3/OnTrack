@@ -9,7 +9,11 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { LeadsService, LeadSummary } from './leads.service';
+import {
+  LeadActivityEntry,
+  LeadsService,
+  LeadSummary,
+} from './leads.service';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
@@ -28,6 +32,11 @@ export class LeadsController {
   @Get(':id')
   async detail(@Param('id') id: string): Promise<LeadSummary> {
     return this.leadsService.findOne(id);
+  }
+
+  @Get(':id/activity')
+  async activity(@Param('id') id: string): Promise<LeadActivityEntry[]> {
+    return this.leadsService.activity(id);
   }
 
   @Post()

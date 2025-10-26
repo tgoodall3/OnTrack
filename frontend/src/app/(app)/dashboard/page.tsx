@@ -26,6 +26,8 @@ type DashboardMetrics = {
     estimatesSent: number;
     approved: number;
     jobsScheduled: number;
+    tasksCompleted: number;
+    tasksPending: number;
     pipelineValue: number;
   };
   nextVisits: Array<{
@@ -160,6 +162,13 @@ export default function DashboardPage() {
           : metrics
             ? "Converted jobs in the last 7 days"
             : "Next open slot pending",
+      },
+      {
+        stage: "Tasks Completed",
+        total: metrics?.pipeline.tasksCompleted ?? 0,
+        highlight: metrics
+          ? `${metrics.pipeline.tasksPending} remaining`
+          : "Awaiting data",
       },
     ],
     [metrics, heroVisit],

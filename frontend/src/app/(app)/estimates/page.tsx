@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { CalendarClock, ClipboardCheck, Loader2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -110,14 +111,15 @@ export default function EstimatesPage() {
     queryFn: fetchEstimates,
   });
 
-  const scheduleJobMutation = useMutation<CreatedJob, Error, ScheduleJobInput>({
+  const scheduleJobMutation = useMutation<CreatedJob, Error, ScheduleJobInput, { previousEstimates?: EstimateSummary[]; optimisticId?: string }>({
     mutationFn: createJob,
     onMutate: async (input) => {
       setJobFormError(null);
       await queryClient.cancelQueries({ queryKey: ["estimates"] });
       const previousEstimates = queryClient.getQueryData<EstimateSummary[]>(["estimates"]);
+      let optimisticId: string | undefined;
       if (previousEstimates) {
-        const optimisticId =
+        optimisticId =
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
             : `temp-${Math.random().toString(36).slice(2)}`;
@@ -132,7 +134,7 @@ export default function EstimatesPage() {
             : estimate,
         ));
       }
-      return { previousEstimates };
+      return { previousEstimates, optimisticId };
     },
     onError: (mutationError, _input, context) => {
       if (context?.previousEstimates) {
@@ -145,20 +147,30 @@ export default function EstimatesPage() {
         description: mutationError.message,
       });
     },
-    onSuccess: (job, input) => {
+    onSuccess: (job, input, context) => {
       queryClient.setQueryData<EstimateSummary[]>(["estimates"], (current) =>
-        current?.map((estimate) =>
-          estimate.id === input.estimateId
-            ? {
-                ...estimate,
-                job: {
-                  id: job.id,
-                  status: job.status,
-                  scheduledStart: job.scheduledStart ?? null,
-                },
-              }
-            : estimate,
-        ),
+        current?.map((estimate) => {
+          if (estimate.id !== input.estimateId) {
+            return estimate;
+          }
+
+          const matchesOptimistic = context?.optimisticId
+            ? estimate.job?.id === context.optimisticId
+            : true;
+
+          if (!matchesOptimistic) {
+            return estimate;
+          }
+
+          return {
+            ...estimate,
+            job: {
+              id: job.id,
+              status: job.status,
+              scheduledStart: job.scheduledStart ?? null,
+            },
+          };
+        }),
       );
       toast({
         variant: "success",
@@ -167,7 +179,7 @@ export default function EstimatesPage() {
       });
       resetJobForm();
     },
-    onSettled: (_data, _error, variables) => {
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["estimates"] });
       void queryClient.invalidateQueries({ queryKey: ["jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
@@ -254,7 +266,11 @@ export default function EstimatesPage() {
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-lg font-semibold text-foreground">{estimate.number}</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    <Link href={`/estimates/${estimate.id}`} className="transition hover:text-primary">
+                      {estimate.number}
+                    </Link>
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {estimate.lead.contactName ?? "Unnamed contact"} · {estimate.lead.stage.replace("_", " ")}
                   </p>
@@ -298,16 +314,16 @@ export default function EstimatesPage() {
                     Job scheduled · {estimate.job.status.replace("_", " ")}
                     {estimate.job.scheduledStart && ` · ${formatDate(estimate.job.scheduledStart)}`}
                   </span>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => openJobForm(estimate)}
-                      className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
-                    >
-                      Schedule job
-                    </button>
-                    {jobForm.estimateId === estimate.id && (
+                 ) : (
+                   <>
+                     <button
+                       type="button"
+                       onClick={() => openJobForm(estimate)}
+                       className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+                     >
+                       Schedule job
+                     </button>
+                     {jobForm.estimateId === estimate.id && (
                       <form
                         onSubmit={handleScheduleJob}
                         className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-muted/40 px-3 py-2 text-xs"
@@ -352,9 +368,15 @@ export default function EstimatesPage() {
                         </button>
                         {jobFormError && <span className="text-xs text-accent">{jobFormError}</span>}
                       </form>
-                    )}
-                  </>
-                )}
+                     )}
+                     <Link
+                       href={`/estimates/${estimate.id}`}
+                       className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+                     >
+                       View details
+                     </Link>
+                   </>
+                 )}
               </div>
             </article>
           ))}

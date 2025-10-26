@@ -1,16 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f7fb;
-  --foreground: #0f172a;
-  --ontrack-primary: #0f3659;
-  --ontrack-primary-foreground: #f8fafc;
-  --ontrack-accent: #9fe870;
+  /* Base */
+  --background: #f4f7fb;          /* very light blue-gray */
+  --foreground: #0f172a;          /* slate-900 */
+
+  /* Brand */
+  --ontrack-primary: #1b5a91;      /* deep navy */
+  --ontrack-primary-foreground: #f8fafc; /* near-white on navy */
+
+  /* Accent (unchanged – good contrast on dark) */
+  --ontrack-accent: #9fe870;       
   --ontrack-accent-foreground: #052e16;
-  --ontrack-muted: #d9e2ef;
-  --ontrack-muted-foreground: #1f2937;
+
+  /* Muted surfaces (lighter so dark text meets 4.5:1) */
+  --ontrack-muted: #eaf2fb;        /* lighter than #d9e2ef */
+  --ontrack-muted-foreground: #0b2240; /* darker text for muted areas */
+
+  /* Cards + dividers */
   --ontrack-surface: #ffffff;
-  --ontrack-border: #c4d1e3;
+  --ontrack-border: #9fb4d1;       /* darker than before for 3:1 non-text contrast */
+
+  /* Optional tonal ladder (useful for utilities) */
+  --ontrack-primary-900: #0b2238;
+  --ontrack-primary-800: #0d2a46;
+  --ontrack-primary-700: #0f3659;  /* == primary */
+  --ontrack-primary-600: #184a78;
+  --ontrack-primary-500: #1f5d96;
 }
 
 @theme inline {
@@ -34,25 +50,39 @@
   :root {
     --background: #0b1623;
     --foreground: #f8fafc;
+
     --ontrack-surface: #101c2a;
-    --ontrack-border: #1f2b3a;
+    --ontrack-border: #2a3a50;       /* a bit lighter so it’s visible on dark */
     --ontrack-muted: #152237;
-    --ontrack-muted-foreground: #cbd5f5;
+    --ontrack-muted-foreground: #e6eefb; /* lighter text on muted dark */
   }
 }
 
 body {
-    background: var(--background);
-    color: var(--foreground);
-    font-family: var(--font-manrope), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .ontrack-gradient {
-  background-image: radial-gradient(circle at top left, rgba(159, 232, 112, 0.3), transparent 45%),
-    radial-gradient(circle at bottom right, rgba(15, 54, 89, 0.25), transparent 40%);
+  background-image:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--ontrack-accent) 30%, transparent), transparent 45%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--ontrack-primary) 25%, transparent), transparent 40%);
 }
 
 .glass-panel {
   background: color-mix(in srgb, var(--ontrack-surface) 82%, transparent);
   backdrop-filter: blur(18px);
+  border: 1px solid var(--ontrack-border);
+}
+
+/* Helpful utilities */
+.text-on-muted { color: var(--ontrack-muted-foreground); }
+.text-on-primary { color: var(--ontrack-primary-foreground); }
+.bg-muted { background: var(--ontrack-muted); }
+.bg-primary { background: var(--ontrack-primary); }
+
+.focus-ring {
+  outline: 2px solid color-mix(in srgb, var(--ontrack-accent) 60%, #ffffff);
+  outline-offset: 2px;
 }

@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { LeadStage } from '@prisma/client';
 import { LeadsService } from './leads.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestContextService } from '../context/request-context.service';
 
 describe('LeadsService', () => {
   let service: LeadsService;
@@ -13,7 +14,16 @@ describe('LeadsService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    activityLog: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+    };
     getTenantIdOrThrow: jest.Mock;
+  };
+  let requestContext: {
+    context: {
+      userId?: string;
+    };
   };
 
   beforeEach(async () => {
@@ -25,7 +35,15 @@ describe('LeadsService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
+      activityLog: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+      },
       getTenantIdOrThrow: jest.fn(),
+    };
+
+    requestContext = {
+      context: {},
     };
 
     const module = await Test.createTestingModule({
@@ -34,6 +52,10 @@ describe('LeadsService', () => {
         {
           provide: PrismaService,
           useValue: prisma,
+        },
+        {
+          provide: RequestContextService,
+          useValue: requestContext,
         },
       ],
     }).compile();
