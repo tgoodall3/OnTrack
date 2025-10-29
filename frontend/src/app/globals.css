@@ -2,26 +2,26 @@
 
 :root {
   /* Base */
-  --background: #f6f8fa;
+  --background: #f9fbff;
   --foreground: #0c1b33;
 
   /* Brand */
   --ontrack-primary: #2563eb;
-  --ontrack-primary-foreground: #f9fafb;
+  --ontrack-primary-foreground: #fdfdff;
 
   /* Accent */
-  --ontrack-accent: #f5b15c;
-  --ontrack-accent-foreground: #3b2f0b;
+  --ontrack-accent: #f7c97d;
+  --ontrack-accent-foreground: #3f2b07;
 
   /* Muted surfaces */
-  --ontrack-muted: #e8edf5;
-  --ontrack-muted-foreground: #1e293b;
+  --ontrack-muted: #eef3ff;
+  --ontrack-muted-foreground: #1f2a44;
 
   /* Cards + borders */
   --ontrack-surface: #ffffff;
-  --ontrack-border: #c3d0e0;
+  --ontrack-border: #d8e2f2;
 
-  /* Tonal ladder (optional) */
+  /* Tonal ladder */
   --ontrack-primary-900: #1e3a8a;
   --ontrack-primary-800: #1d4ed8;
   --ontrack-primary-700: #2563eb;
@@ -85,4 +85,130 @@ body {
 .focus-ring {
   outline: 2px solid color-mix(in srgb, var(--ontrack-accent) 60%, #ffffff);
   outline-offset: 2px;
+}
+
+@layer components {
+  .stack-sm {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .stack-sm {
+      flex-direction: row;
+      align-items: center;
+      gap: 1.5rem;
+    }
+  }
+
+  .page-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.75rem 1.25rem 2.25rem;
+  }
+
+  @media (min-width: 640px) {
+    .page-container {
+      padding: 2rem 1.75rem 2.5rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .page-container {
+      border-radius: 1.75rem;
+      border: 1px solid color-mix(in srgb, var(--ontrack-border) 85%, transparent);
+      background: color-mix(in srgb, var(--ontrack-surface) 95%, transparent);
+      padding: 2.25rem 2.5rem 2.75rem;
+      box-shadow: 0 22px 55px -28px rgba(37, 99, 235, 0.22);
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .page-container {
+      padding: 2.75rem 3rem 3.25rem;
+    }
+  }
+
+  .page-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .page-stack {
+      gap: 2rem;
+    }
+  }
+
+  .section-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    border-radius: 1.6rem;
+    border: 1px solid color-mix(in srgb, var(--ontrack-border) 85%, transparent);
+    background: color-mix(in srgb, var(--ontrack-surface) 97%, transparent);
+    padding: 1.25rem;
+    box-shadow: 0 18px 44px -32px rgba(15, 23, 42, 0.18);
+  }
+
+  @media (min-width: 640px) {
+    .section-card {
+      border-radius: 1.9rem;
+      padding: 1.65rem;
+      gap: 1.25rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .section-card {
+      padding: 2.1rem;
+      gap: 1.75rem;
+    }
+  }
+
+  .section-card.section-card--muted {
+    background: color-mix(in srgb, var(--ontrack-muted) 35%, var(--ontrack-surface));
+    border-color: color-mix(in srgb, var(--ontrack-border) 70%, transparent);
+  }
+
+  .section-card.section-card--callout {
+    background: color-mix(in srgb, var(--ontrack-accent) 28%, var(--ontrack-surface));
+    border-color: color-mix(in srgb, var(--ontrack-accent) 45%, var(--ontrack-border));
+    color: var(--ontrack-accent-foreground);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--ontrack-muted) 30%, var(--ontrack-surface));
+    color: color-mix(in srgb, var(--foreground) 70%, var(--ontrack-muted-foreground));
+  }
+
+  .chip.chip--outline {
+    border-color: color-mix(in srgb, var(--ontrack-border) 80%, transparent);
+    background: color-mix(in srgb, var(--ontrack-surface) 94%, transparent);
+  }
+
+  .chip.chip--primary {
+    border-color: color-mix(in srgb, var(--ontrack-primary) 55%, transparent);
+    background: color-mix(in srgb, var(--ontrack-primary) 15%, var(--ontrack-surface));
+    color: color-mix(in srgb, var(--ontrack-primary) 65%, var(--foreground));
+  }
+
+  .chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
 }

@@ -401,8 +401,8 @@ export default function ChecklistsPage() {
   }, [editingTemplateId, templates]);
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
+    <div className="page-stack">
+      <header className="section-card stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 shadow-md shadow-primary/10">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Checklist Templates</h1>
           <p className="text-sm text-muted-foreground">
@@ -544,7 +544,7 @@ export default function ChecklistsPage() {
               >
                 {isEditing ? (
                   <div className="space-y-4">
-                    <header className="flex flex-wrap items-start justify-between gap-3">
+                    <header className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
                       <div className="space-y-2">
                         <p className="text-lg font-semibold text-foreground">Editing {template.name}</p>
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -624,7 +624,7 @@ export default function ChecklistsPage() {
                     </div>
 
                     <div className="space-y-3 rounded-2xl border border-border/70 bg-muted/30 p-4">
-                      <header className="flex flex-wrap items-center justify-between gap-2">
+                      <header className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
                         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Checklist items
                         </span>
@@ -710,7 +710,7 @@ export default function ChecklistsPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
                       <div className="space-y-2">
                         <p className="text-lg font-semibold text-foreground">{template.name}</p>
                         {template.description && (
@@ -805,7 +805,7 @@ export default function ChecklistsPage() {
       </section>
 
       <section className="space-y-4">
-        <header className="flex flex-wrap items-center justify-between gap-2">
+        <header className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Archived templates</h2>
             <p className="text-sm text-muted-foreground">
@@ -845,7 +845,7 @@ export default function ChecklistsPage() {
                 key={template.id}
                 className="space-y-4 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
                   <div className="space-y-2">
                     <p className="text-lg font-semibold text-foreground">{template.name}</p>
                     {template.description && (
@@ -1012,7 +1012,7 @@ function TemplateUsageDetails({
                 key={job.jobId}
                 className="space-y-2 rounded-xl border border-border/60 bg-background/60 p-3 text-[11px] text-muted-foreground"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
                   <span className="font-semibold text-foreground">{job.jobLabel}</span>
                   <span className="rounded-full bg-muted/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {formatStatusLabel(job.jobStatus)}
@@ -1202,3 +1202,5 @@ function capitalize(value: string): string {
   }
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
+
+

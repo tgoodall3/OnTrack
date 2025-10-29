@@ -274,8 +274,8 @@ function EstimatesPageContent() {
   const showLoading = isLoading || isFetching;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
+    <div className="page-stack">
+      <header className="section-card stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 shadow-md shadow-primary/10">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Estimates</h1>
           <p className="text-sm text-muted-foreground">
@@ -466,7 +466,7 @@ function StatusCard({ label, value }: { label: string; value: string }) {
 
 function LineItemRow({ item }: { item: EstimateSummary["lineItems"][number] }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 py-2 last:border-none">
+    <div className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-2 border-b border-border/50 py-2 last:border-none">
       <div>
         <p className="font-medium text-foreground">{item.description}</p>
         <p className="text-xs">

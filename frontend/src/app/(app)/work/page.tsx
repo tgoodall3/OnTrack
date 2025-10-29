@@ -651,8 +651,8 @@ function WorkPageContent() {
   };
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
+    <div className="page-stack">
+      <header className="section-card stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 shadow-md shadow-primary/10">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Work Orders</h1>
           <p className="text-sm text-muted-foreground">
@@ -697,7 +697,7 @@ function WorkPageContent() {
                   key={job.id}
                   className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/60"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-lg font-semibold text-foreground">
@@ -1435,7 +1435,7 @@ function JobActivityStream({
 }) {
   return (
     <div className="mt-4 space-y-2 rounded-2xl border border-border/60 bg-background/40 p-3 text-xs text-muted-foreground">
-      <div className="flex items-center justify-between">
+      <div className="stack-sm sm:justify-between">
         <span className="font-semibold uppercase tracking-wide text-muted-foreground/80">Recent activity</span>
         {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}
       </div>

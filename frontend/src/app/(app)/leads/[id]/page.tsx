@@ -340,7 +340,7 @@ export default function LeadDetailPage() {
 
   if (error || !data) {
     return (
-      <div className="space-y-4">
+      <div className="page-stack">
         <Link
           href="/leads"
           className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition hover:border-primary hover:text-primary"
@@ -356,8 +356,8 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="page-stack">
+      <div className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
         <Link
           href="/leads"
           className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition hover:border-primary hover:text-primary"
@@ -365,7 +365,7 @@ export default function LeadDetailPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to leads
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="stack-sm sm:flex-row sm:items-center sm:justify-end sm:gap-2">
           <button
             type="button"
             onClick={handleShare}
@@ -384,8 +384,8 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
-      <section className="rounded-3xl border border-border/60 bg-surface p-6 shadow-md shadow-primary/10">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className="section-card shadow-md shadow-primary/10">
+        <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
           <div>
             <p className="text-xs uppercase text-muted-foreground">Lead</p>
             <h1 className="text-3xl font-semibold text-foreground">{data.contact.name}</h1>
@@ -430,7 +430,7 @@ export default function LeadDetailPage() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[3fr,2fr]">
-        <section className="rounded-3xl border border-border/60 bg-surface p-6 shadow-sm shadow-primary/5">
+        <section className="section-card shadow-sm shadow-primary/5">
           <header className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">Engagement summary</h2>
             <button
@@ -445,7 +445,10 @@ export default function LeadDetailPage() {
 
           <dl className="space-y-3 text-sm text-muted-foreground">
             {metadata?.map((item) => (
-              <div key={item.label} className="flex items-center justify-between rounded-2xl bg-muted/20 px-3 py-2">
+              <div
+                key={item.label}
+                className="section-card section-card--muted stack-sm sm:flex-row sm:items-center sm:justify-between px-3 py-2"
+              >
                 <dt className="font-semibold text-foreground">{item.label}</dt>
                 <dd>{item.value}</dd>
               </div>
@@ -464,7 +467,7 @@ export default function LeadDetailPage() {
           </div>
 
           <div className="rounded-3xl border border-border/60 bg-muted/20 p-5 text-sm text-muted-foreground">
-            <header className="mb-3 flex items-center justify-between text-sm font-semibold text-foreground">
+            <header className="mb-3 stack-sm sm:items-center sm:justify-between text-sm font-semibold text-foreground">
               <span>Notes</span>
               {editingNotes ? null : (
                 <button
@@ -484,7 +487,7 @@ export default function LeadDetailPage() {
                   className="min-h-[140px] w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                   placeholder="Discovery details, preferences, next steps..."
                 />
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                   <button
                     type="button"
                     onClick={handleSaveNotes}
@@ -564,7 +567,7 @@ function MetricCard({ label, value, icon }: { label: string; value: string | num
 function LeadSkeleton() {
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
         <div className="h-8 w-32 rounded-full bg-muted/30 animate-pulse" />
         <div className="h-8 w-48 rounded-full bg-muted/30 animate-pulse" />
       </div>

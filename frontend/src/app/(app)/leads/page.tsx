@@ -381,8 +381,8 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
+    <div className="page-stack">
+      <header className="section-card stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 shadow-md shadow-primary/10">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Leads</h1>
           <p className="text-sm text-muted-foreground">
@@ -395,8 +395,8 @@ export default function LeadsPage() {
         </div>
       </header>
 
-      <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className="section-card text-sm text-muted-foreground shadow-sm shadow-primary/5">
+        <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
           <div className="max-w-xl space-y-1">
             <h2 className="text-lg font-semibold text-foreground">Import from CSV</h2>
             <p>
@@ -466,8 +466,8 @@ export default function LeadsPage() {
         </p>
       </section>
 
-      <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/10">
-        <header className="mb-4 flex items-center justify-between">
+      <section className="section-card shadow-sm shadow-primary/10">
+      <header className="mb-4 stack-sm sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Add lead</h2>
             <p className="text-sm text-muted-foreground">Capture new opportunities or link existing contacts/properties.</p>
@@ -653,12 +653,12 @@ export default function LeadsPage() {
       </section>
 
       {error && (
-        <div className="rounded-3xl border border-accent/40 bg-accent/15 px-4 py-3 text-sm text-accent-foreground">
+        <div className="section-card section-card--callout px-4 py-3 text-sm">
           {error}
         </div>
       )}
       {lookupError && (
-        <div className="rounded-3xl border border-accent/40 bg-accent/15 px-4 py-3 text-sm text-accent-foreground">
+        <div className="section-card section-card--callout px-4 py-3 text-sm">
           {lookupError}
         </div>
       )}
@@ -677,21 +677,21 @@ export default function LeadsPage() {
           </label>
         </header>
         {loading ? (
-          <div className="flex items-center gap-3 rounded-3xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          <div className="section-card section-card--muted stack-sm sm:flex-row sm:items-center text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             Loading leads…
           </div>
         ) : visibleLeads.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-border/80 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+          <div className="section-card section-card--muted border border-dashed border-border/70 text-center text-sm text-muted-foreground">
             No leads yet. Add your first opportunity above to start building the pipeline.
           </div>
         ) : (
           visibleLeads.map((lead) => (
             <article
               key={lead.id}
-              className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/50"
+              className="section-card shadow-md shadow-primary/10 transition hover:border-primary/50"
             >
-              <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
                 <div>
                   <p className="text-lg font-semibold text-foreground">
                     <Link href={`/leads/${lead.id}`} className="transition hover:text-primary">
@@ -710,7 +710,7 @@ export default function LeadsPage() {
                     </p>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="stack-sm sm:flex-row sm:items-center sm:justify-end sm:gap-3">
                   <select
                     value={lead.stage}
                     onChange={(event) => void handleStageChange(lead.id, event.target.value as LeadStage)}

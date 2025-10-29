@@ -539,9 +539,9 @@ const { toast } = useToast();
   const approveDisabled = approveEstimateMutation.isPending || !approveForm.name.trim();
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4 rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
-        <div>
+    <div className="page-stack">
+      <header className="section-card stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6 shadow-md shadow-primary/10">
+        <div className="space-y-3">
           <Link
             href="/estimates"
             className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:text-primary"
@@ -549,26 +549,26 @@ const { toast } = useToast();
             <ArrowLeft className="h-3 w-3" aria-hidden="true" />
             Back to estimates
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold text-foreground">Estimate {estimate.number}</h1>
+          <h1 className="text-2xl font-semibold text-foreground md:text-3xl">Estimate {estimate.number}</h1>
           <p className="text-sm text-muted-foreground">
             Created {formatDate(estimate.createdAt)} &bull; Last updated {formatDate(estimate.updatedAt)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="chip-group">
+          <span className="chip chip--primary">
             <ClipboardList className="h-3 w-3 text-primary" aria-hidden="true" />
             {statusLabel}
           </span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="chip chip--outline">
             <Layers className="h-3 w-3 text-primary" aria-hidden="true" />
             {estimate.template ? estimate.template.name : "Manual entry"}
           </span>
-          <label className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground focus-within:border-primary">
-            <span>Status</span>
+          <label className="chip chip--outline gap-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
+            <span className="text-[0.7rem] font-semibold uppercase tracking-wide">Status</span>
             <select
               value={estimate.status}
               onChange={(event) => updateStatusMutation.mutate(event.target.value as EstimateStatus)}
-              className="bg-transparent text-xs font-semibold uppercase tracking-wide text-muted-foreground focus:outline-none"
+              className="bg-transparent text-sm font-semibold tracking-wide text-muted-foreground focus:outline-none"
               disabled={updateStatusMutation.isPending}
             >
               {STATUS_OPTIONS.map((option) => (
@@ -582,9 +582,9 @@ const { toast } = useToast();
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-[2fr,1fr]">
-        <div className="space-y-4 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5">
-          <header className="flex flex-wrap items-center justify-between gap-3">
+      <section className="page-stack lg:grid lg:grid-cols-[minmax(0,2fr),minmax(0,1fr)] lg:gap-6">
+        <div className="section-card shadow-sm shadow-primary/5">
+          <header className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Proposal summary</h2>
               <p className="text-sm text-muted-foreground">Line items and totals that will be shared with the customer.</p>
@@ -597,10 +597,10 @@ const { toast } = useToast();
             </Link>
           </header>
 
-          <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4 text-xs text-muted-foreground">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="section-card section-card--muted text-xs text-muted-foreground">
+            <div className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
               <h3 className="text-sm font-semibold text-foreground">Template</h3>
-              <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="chip chip--outline text-[0.65rem]">
                 {estimate.template ? estimate.template.name : "Manual entry"}
               </span>
             </div>
@@ -648,7 +648,7 @@ const { toast } = useToast();
                   )}
                 </div>
                 {selectedTemplateOption && (
-                  <div className="space-y-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-3">
+                  <div className="section-card section-card--muted border border-dashed border-border/60">
                     {selectedTemplateOption.description && (
                       <p className="text-xs text-muted-foreground">{selectedTemplateOption.description}</p>
                     )}
@@ -674,7 +674,7 @@ const { toast } = useToast();
             )}
           </div>
 
-          <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+          <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             {estimate.lineItems.map((item) => (
               <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-background px-3 py-2">
                 <div>
@@ -688,22 +688,22 @@ const { toast } = useToast();
             ))}
           </div>
 
-          <div className="grid gap-2 rounded-2xl bg-muted/30 p-4 text-sm text-muted-foreground">
-            <div className="flex items-center justify-between">
+          <div className="section-card section-card--muted text-sm text-muted-foreground">
+            <div className="stack-sm sm:items-center sm:justify-between">
               <span className="font-semibold text-foreground">Subtotal</span>
               <span>{formatCurrency(totals.subtotal)}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="stack-sm sm:items-center sm:justify-between">
               <span className="font-semibold text-foreground">Tax (8.25%)</span>
               <span>{formatCurrency(totals.tax)}</span>
             </div>
-            <div className="flex items-center justify-between text-base font-semibold text-foreground">
+            <div className="stack-sm sm:items-center sm:justify-between text-base font-semibold text-foreground">
               <span>Total</span>
               <span>{formatCurrency(totals.total)}</span>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+          <div className="section-card section-card--muted text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Notes</h3>
             <p className="mt-1">{estimate.notes?.length ? estimate.notes : "No notes captured."}</p>
           </div>
@@ -716,7 +716,7 @@ const { toast } = useToast();
         </div>
 
         <aside className="space-y-4">
-          <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+          <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Lead snapshot</h3>
             <div className="space-y-2">
               <SnapshotRow icon={<ClipboardList className="h-4 w-4 text-primary" />} label="Lead stage" value={estimate.lead.stage.replace("_", " ")} />
@@ -725,7 +725,7 @@ const { toast } = useToast();
             </div>
           </div>
 
-          <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+          <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Customer delivery</h3>
             {latestSend ? (
               <div className="space-y-1 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-xs">
@@ -832,7 +832,7 @@ const { toast } = useToast();
             </form>
           </div>
 
-          <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+          <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Approval</h3>
             {estimate.status === "APPROVED" ? (
               <div className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
@@ -909,7 +909,7 @@ const { toast } = useToast();
 
           <ApprovalHistoryCard entries={approvalHistory} />
 
-          <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+          <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Job conversion</h3>
             {estimate.job ? (
               <div className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
@@ -1053,7 +1053,7 @@ function formatRelativeTimeFromNow(iso: string) {
 
 function ApprovalHistoryCard({ entries }: { entries: EstimateApprovalEntry[] }) {
   return (
-    <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
+    <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
       <h3 className="text-sm font-semibold text-foreground">Delivery & approvals</h3>
       {entries.length === 0 ? (
         <p className="text-xs text-muted-foreground/80">No delivery history yet.</p>

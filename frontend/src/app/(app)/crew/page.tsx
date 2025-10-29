@@ -254,9 +254,9 @@ export default function CrewMyDayPage() {
   }, [allJobs, selectedCrewId]);
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-4 px-4 pb-8 pt-6 sm:px-6">
-      <header className="rounded-3xl border border-border/60 bg-surface p-5 shadow-md shadow-primary/10">
-        <div className="flex items-start justify-between gap-3">
+    <div className="page-stack w-full max-w-3xl mx-auto">
+      <header className="section-card shadow-md shadow-primary/10">
+        <div className="stack-sm sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           <div className="space-y-2 text-muted-foreground">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
               {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}

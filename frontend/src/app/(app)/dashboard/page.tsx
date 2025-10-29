@@ -175,7 +175,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="space-y-10">
+    <div className="page-stack">
       <section className="flex flex-col gap-6 rounded-3xl bg-gradient-to-br from-primary/92 via-primary to-primary/80 p-7 text-primary-foreground shadow-lg shadow-primary/30 md:flex-row md:items-center md:justify-between md:p-10 ">
         <div className="space-y-3">
           <span className="inline-flex items-center rounded-full bg-primary-foreground/10 px-3 py-1 text-xs font-semibold uppercase">
@@ -228,9 +228,9 @@ export default function DashboardPage() {
           return (
             <div
               key={card.label}
-              className="rounded-3xl border border-border/60 bg-surface p-5 shadow-md shadow-primary/5 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/20"
+              className="section-card shadow-md shadow-primary/5 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/20"
             >
-              <div className="flex items-center justify-between">
+              <div className="stack-sm sm:justify-between">
                 <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
                 <span className="rounded-full bg-primary/10 p-2 text-primary">
                   <Icon className="h-4 w-4" />
@@ -244,8 +244,8 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
-          <div className="flex items-center justify-between">
+        <div className="section-card shadow-md shadow-primary/10">
+          <div className="stack-sm sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Upcoming Jobs</h2>
               <p className="text-sm text-muted-foreground">Next 48 hours — synced from the field</p>
@@ -263,7 +263,7 @@ export default function DashboardPage() {
                 key={job.id}
                 className="rounded-2xl border border-border/70 bg-surface p-4 shadow-sm shadow-primary/5 transition hover:border-primary/60 hover:shadow-primary/20"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="stack-sm sm:items-start sm:justify-between sm:gap-3">
                   <div>
                     <p className="text-base font-semibold text-foreground">{job.title}</p>
                     <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
@@ -295,8 +295,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10">
-          <div className="flex items-center justify-between">
+        <div className="section-card shadow-md shadow-primary/10">
+          <div className="stack-sm sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Pipeline Snapshot</h2>
               <p className="text-sm text-muted-foreground">
@@ -314,7 +314,7 @@ export default function DashboardPage() {
             {pipeline.map((step) => (
               <div
                 key={step.stage}
-                className="flex items-start justify-between rounded-2xl bg-muted/60 p-4 transition hover:bg-muted"
+                className="stack-sm sm:flex-row sm:items-start sm:justify-between rounded-2xl bg-muted/60 p-4 transition hover:bg-muted"
               >
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{step.stage}</p>

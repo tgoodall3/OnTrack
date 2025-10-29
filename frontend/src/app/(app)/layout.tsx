@@ -52,22 +52,22 @@ export default function AppLayout({ children }: PropsWithChildren) {
       <div className="relative flex min-h-screen flex-col bg-background text-foreground">
         <ToastContainer />
         <header className="glass-panel border-b border-border/60">
-          <div className="mx-auto flex w-full max-w-7xl items-center gap-4 px-4 py-3 sm:gap-6 sm:px-6 md:py-4">
-            <div className="flex items-center gap-4 sm:gap-6">
+          <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 md:flex-nowrap md:py-4">
+            <div className="flex items-center gap-3 sm:gap-6">
               <Logo />
             </div>
             <div className="hidden flex-1 md:block">
               {/* <AppNavigation /> */}
             </div>
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex items-center gap-2 md:gap-3">
               <MobileNav />
               <HeaderActions />
             </div>
           </div>
         </header>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-1 gap-4 px-3 pb-6 pt-4 sm:gap-6 sm:px-4 md:px-6 md:pb-8 md:pt-6 lg:pb-12">
-          <aside className="sticky top-24 hidden h-fit w-60 shrink-0 rounded-3xl border border-border/80 bg-surface/95 p-4 shadow-lg shadow-primary/5 md:block">
+        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-3 pb-6 pt-4 sm:gap-6 sm:px-4 md:flex-row md:px-6 md:pb-8 md:pt-6 lg:pb-12">
+          <aside className="sticky top-24 hidden h-fit w-full shrink-0 rounded-3xl border border-border/80 bg-surface/95 p-4 shadow-lg shadow-primary/5 md:block md:w-60">
             <div className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Workspace
             </div>
@@ -84,8 +84,8 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </div>
           </aside>
 
-          <main className="flex-1">
-            <div className="rounded-2xl border border-border/60 bg-surface/95 p-4 shadow-lg shadow-primary/10 sm:rounded-3xl sm:p-6 md:p-8 lg:p-10">
+          <main className="w-full flex-1">
+            <div className="page-container">
               {children}
             </div>
           </main>
