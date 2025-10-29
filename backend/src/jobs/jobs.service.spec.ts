@@ -414,6 +414,20 @@ describe('JobsService', () => {
               checklistTemplateId: 'tmpl_focus',
             },
           ],
+          timeEntries: [
+            {
+              id: 'entry_active',
+              jobId: 'job_sched',
+              userId: 'user_1',
+              tenantId: 'tenant_1',
+              clockIn: scheduled,
+              clockOut: null,
+              gps: null,
+              notes: null,
+              createdAt: scheduled,
+              updatedAt: scheduled,
+            },
+          ],
         },
       ]);
 
@@ -440,6 +454,13 @@ describe('JobsService', () => {
                 status: { not: TaskStatus.COMPLETE },
               }),
             }),
+            timeEntries: expect.objectContaining({
+              where: expect.objectContaining({
+                userId: 'user_1',
+                clockOut: null,
+              }),
+              take: 1,
+            }),
           }),
           take: 10,
         }),
@@ -457,6 +478,8 @@ describe('JobsService', () => {
             updatedAt: scheduled.toISOString(),
             leadName: 'Jordan Diaz',
             propertyAddress: expect.stringContaining('Austin'),
+            activeTimeEntryId: 'entry_active',
+            activeClockIn: scheduled.toISOString(),
           },
           tasks: [
             {

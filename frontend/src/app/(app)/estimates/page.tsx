@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { CalendarClock, ClipboardCheck, Loader2, Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
@@ -104,6 +104,22 @@ async function createJob(payload: ScheduleJobInput): Promise<CreatedJob> {
 }
 
 export default function EstimatesPage() {
+  return (
+    <Suspense fallback={<EstimatesPageFallback />}>
+      <EstimatesPageContent />
+    </Suspense>
+  );
+}
+
+function EstimatesPageFallback() {
+  return (
+    <div className="flex min-h-[300px] items-center justify-center rounded-3xl border border-border bg-muted/30 p-6 text-sm text-muted-foreground">
+      Loading estimates...
+    </div>
+  );
+}
+
+function EstimatesPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const searchParams = useSearchParams();

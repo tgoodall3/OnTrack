@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -100,6 +100,22 @@ const createBlankLineItem = (): LineItemDraft => ({
 });
 
 export default function NewEstimatePage() {
+  return (
+    <Suspense fallback={<NewEstimatePageFallback />}>
+      <NewEstimatePageContent />
+    </Suspense>
+  );
+}
+
+function NewEstimatePageFallback() {
+  return (
+    <div className="flex min-h-[400px] items-center justify-center rounded-3xl border border-border bg-muted/30 p-6 text-sm text-muted-foreground">
+      Loading estimate builder...
+    </div>
+  );
+}
+
+function NewEstimatePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();

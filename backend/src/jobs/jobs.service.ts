@@ -116,6 +116,8 @@ export interface CrewScheduleEntry {
     updatedAt: string;
     leadName?: string | null;
     propertyAddress?: string | null;
+    activeTimeEntryId?: string | null;
+    activeClockIn?: string | null;
   };
   tasks: Array<{
     id: string;
@@ -281,6 +283,16 @@ export class JobsService {
             createdAt: 'asc',
           },
         },
+        timeEntries: {
+          where: {
+            userId: assigneeId,
+            clockOut: null,
+          },
+          orderBy: {
+            clockIn: 'desc',
+          },
+          take: 1,
+        },
       },
     });
 
@@ -296,6 +308,10 @@ export class JobsService {
         leadName: job.lead?.contact?.name ?? null,
         propertyAddress: job.property
           ? formatAddress(job.property.address)
+          : null,
+        activeTimeEntryId: job.timeEntries[0]?.id ?? null,
+        activeClockIn: job.timeEntries[0]?.clockIn
+          ? job.timeEntries[0].clockIn.toISOString()
           : null,
       },
       tasks: job.tasks.map((task) => ({
