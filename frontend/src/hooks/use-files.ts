@@ -5,6 +5,8 @@ const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
 
 export type FileType = "IMAGE" | "DOCUMENT" | "VIDEO" | "OTHER";
 
+export type FileScanStatus = "PENDING" | "CLEAN" | "INFECTED" | "FAILED";
+
 export type UploadedFileSummary = {
   id: string;
   url: string;
@@ -13,6 +15,10 @@ export type UploadedFileSummary = {
   fileName: string;
   fileSize?: number | null;
   mimeType?: string | null;
+  scanStatus: FileScanStatus;
+  scanMessage?: string | null;
+  processedAt?: string | null;
+  isProcessing: boolean;
   jobId?: string | null;
   estimateId?: string | null;
   invoiceId?: string | null;

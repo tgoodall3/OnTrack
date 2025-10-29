@@ -9,6 +9,9 @@ export type ChecklistTemplate = {
   id: string;
   name: string;
   description?: string | null;
+  isArchived: boolean;
+  jobUsageCount: number;
+  taskUsageCount: number;
   createdAt: string;
   updatedAt: string;
   items: Array<{
@@ -43,8 +46,35 @@ export type ChecklistTemplateActivityEntry = {
   meta?: unknown;
 };
 
-async function fetchTemplates(): Promise<ChecklistTemplate[]> {
-  const response = await fetch(`${API_BASE_URL}/checklists/templates`, {
+export type ChecklistTemplateUsageJob = {
+  jobId: string;
+  jobStatus: string;
+  jobLabel: string;
+  taskCount: number;
+  sampleTasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+  }>;
+};
+
+export type ChecklistTemplateUsage = {
+  template: {
+    id: string;
+    name: string;
+  };
+  totalJobs: number;
+  totalTasks: number;
+  jobs: ChecklistTemplateUsageJob[];
+};
+
+async function fetchTemplates(archived = false): Promise<ChecklistTemplate[]> {
+  const url = new URL(`${API_BASE_URL}/checklists/templates`);
+  if (archived) {
+    url.searchParams.set("archived", "true");
+  }
+
+  const response = await fetch(url.toString(), {
     headers: {
       "Content-Type": "application/json",
       "X-Tenant-ID": TENANT_HEADER,
@@ -105,7 +135,8 @@ async function deleteTemplate(id: string): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error(`Template delete failed (${response.status})`);
+    const message = await response.text().catch(() => null);
+    throw new Error(message || `Template delete failed (${response.status})`);
   }
 }
 
@@ -125,10 +156,62 @@ async function fetchTemplateActivity(templateId: string): Promise<ChecklistTempl
   return response.json();
 }
 
-export function useChecklistTemplates() {
+async function fetchTemplateUsage(templateId: string): Promise<ChecklistTemplateUsage> {
+  const response = await fetch(`${API_BASE_URL}/checklists/templates/${templateId}/usage`, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => null);
+    throw new Error(message || `Failed to load template usage (${response.status})`);
+  }
+
+  return response.json();
+}
+
+async function archiveTemplate(id: string): Promise<ChecklistTemplate> {
+  const response = await fetch(`${API_BASE_URL}/checklists/templates/${id}/archive`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => null);
+    throw new Error(message || `Template archive failed (${response.status})`);
+  }
+
+  return response.json();
+}
+
+async function restoreTemplate(id: string): Promise<ChecklistTemplate> {
+  const response = await fetch(`${API_BASE_URL}/checklists/templates/${id}/restore`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => null);
+    throw new Error(message || `Template restore failed (${response.status})`);
+  }
+
+  return response.json();
+}
+
+export function useChecklistTemplates(options?: { archived?: boolean }) {
+  const archived = options?.archived ?? false;
   return useQuery<ChecklistTemplate[], Error>({
-    queryKey: ["checklist-templates"],
-    queryFn: fetchTemplates,
+    queryKey: ["checklist-templates", archived ? "archived" : "active"],
+    queryFn: () => fetchTemplates(archived),
   });
 }
 
@@ -138,6 +221,7 @@ export function useCreateChecklistTemplate() {
     mutationFn: createTemplate,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["checklist-templates"] });
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates", "archived"] });
     },
   });
 }
@@ -150,12 +234,21 @@ export function useChecklistTemplateActivity(templateId: string | null, enabled 
   });
 }
 
+export function useChecklistTemplateUsage(templateId: string | null, enabled = true) {
+  return useQuery<ChecklistTemplateUsage, Error>({
+    queryKey: ["checklist-templates", templateId, "usage"],
+    queryFn: () => fetchTemplateUsage(templateId as string),
+    enabled: enabled && !!templateId,
+  });
+}
+
 export function useUpdateChecklistTemplate() {
   const queryClient = useQueryClient();
   return useMutation<ChecklistTemplate, Error, UpdateChecklistTemplateInput>({
     mutationFn: updateTemplate,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["checklist-templates"] });
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates", "archived"] });
     },
   });
 }
@@ -166,6 +259,29 @@ export function useDeleteChecklistTemplate() {
     mutationFn: ({ id }) => deleteTemplate(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["checklist-templates"] });
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates", "archived"] });
+    },
+  });
+}
+
+export function useArchiveChecklistTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<ChecklistTemplate, Error, { id: string }>({
+    mutationFn: ({ id }) => archiveTemplate(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates"] });
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates", "archived"] });
+    },
+  });
+}
+
+export function useRestoreChecklistTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<ChecklistTemplate, Error, { id: string }>({
+    mutationFn: ({ id }) => restoreTemplate(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates"] });
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates", "archived"] });
     },
   });
 }

@@ -34,7 +34,8 @@ OnTrack is a multi-tenant SaaS that guides contractors from lead intake through 
 ## Documentation Index
 - Architecture overview: `docs/architecture/overview.md`
 - Implementation roadmap: `docs/architecture/implementation-plan.md`
-- Runbooks (placeholder): `docs/runbooks/`
+- Email testing runbook: `docs/runbooks/email-testing.md`
+- Additional runbooks (WIP): `docs/runbooks/`
 
 ## Current Status
 - Architectural plans and roadmap are documented.

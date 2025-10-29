@@ -6,9 +6,10 @@ import { TenantGuard } from '../tenancy/tenant.guard';
 import { RequestContextModule } from '../context/request-context.module';
 import { EstimateMailerService } from './estimate-mailer.service';
 import { StorageModule } from '../storage/storage.module';
+import { FilesModule } from '../files/files.module';
 
 @Module({
-  imports: [RequestContextModule, PrismaModule, StorageModule],
+  imports: [RequestContextModule, PrismaModule, StorageModule, FilesModule],
   controllers: [EstimatesController],
   providers: [EstimatesService, EstimateMailerService, TenantGuard],
   exports: [EstimatesService],

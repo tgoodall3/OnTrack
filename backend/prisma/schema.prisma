@@ -238,6 +238,7 @@ model ChecklistTemplate {
   tenantId    String
   name        String
   description String?
+  isArchived  Boolean        @default(false)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   items       ChecklistItem[]
@@ -365,6 +366,9 @@ model File {
   invoiceId    String?
   url          String
   type         FileType
+  scanStatus   FileScanStatus @default(PENDING)
+  scanMessage  String?
+  processedAt  DateTime?
   uploadedById String?
   metadata     Json?
   createdAt    DateTime  @default(now())
@@ -500,6 +504,13 @@ enum FileType {
   DOCUMENT
   VIDEO
   OTHER
+}
+
+enum FileScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  FAILED
 }
 
 enum NotificationChannel {

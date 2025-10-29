@@ -9,54 +9,10 @@ import { useTeamMembers, TeamMember } from "@/hooks/use-team-members";
 import { ChecklistTemplate, useChecklistTemplates } from "@/hooks/use-checklist-templates";
 import { JobActivityEntry, useJobActivity } from "@/hooks/use-job-activity";
 import { FilesSection } from "@/components/files/files-section";
+import { JobStatus, JobSummary, TaskSummary } from "@/lib/types/jobs";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
-
-type JobStatus = "DRAFT" | "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "ON_HOLD" | "CANCELED";
-
-type JobSummary = {
-  id: string;
-  status: JobStatus;
-  notes?: string | null;
-  scheduledStart?: string | null;
-  scheduledEnd?: string | null;
-  actualStart?: string | null;
-  actualEnd?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  lead?: {
-    id: string;
-    stage: string;
-    contactName?: string | null;
-  };
-  estimate?: {
-    id: string;
-    number?: string | null;
-    status: string;
-  };
-  property?: {
-    id: string;
-    address: string;
-  };
-  tasks?: TaskSummary[];
-};
-
-type TaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETE" | "BLOCKED";
-
-type TaskSummary = {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  dueAt?: string | null;
-  checklistTemplateId?: string | null;
-  assignee?: {
-    id: string;
-    name?: string | null;
-    email?: string | null;
-  };
-  metadata?: Record<string, unknown>;
-};
 
 type CreateTaskInput = {
   jobId: string;
@@ -758,7 +714,7 @@ function WorkPageContent() {
                         {job.estimate?.number ?? "Unscheduled estimate"} - {job.lead?.stage.replace("_", " ") ?? "Lead"}
                       </p>
                       {job.property && (
-                        <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
+                        <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground w-80">
                           <MapPin className="h-4 w-4 text-primary" />
                           {job.property.address}
                         </p>

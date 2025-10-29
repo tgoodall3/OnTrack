@@ -15,6 +15,9 @@ export interface ChecklistTemplateSummary {
   id: string;
   name: string;
   description?: string | null;
+  isArchived: boolean;
+  jobUsageCount: number;
+  taskUsageCount: number;
   items: Array<{
     id: string;
     title: string;
@@ -36,6 +39,33 @@ export interface ChecklistTemplateActivityEntry {
   meta?: Prisma.JsonValue | null;
 }
 
+export interface ChecklistTemplateUsageJob {
+  jobId: string;
+  jobStatus: string;
+  jobLabel: string;
+  taskCount: number;
+  sampleTasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+  }>;
+}
+
+export interface ChecklistTemplateUsage {
+  template: {
+    id: string;
+    name: string;
+  };
+  totalJobs: number;
+  totalTasks: number;
+  jobs: ChecklistTemplateUsageJob[];
+}
+
+type TemplateUsageStats = {
+  jobCount: number;
+  taskCount: number;
+};
+
 @Injectable()
 export class ChecklistsService {
   constructor(
@@ -43,11 +73,14 @@ export class ChecklistsService {
     private readonly requestContext: RequestContextService,
   ) {}
 
-  async listTemplates(): Promise<ChecklistTemplateSummary[]> {
+  async listTemplates(includeArchived = false): Promise<ChecklistTemplateSummary[]> {
     const tenantId = this.prisma.getTenantIdOrThrow();
 
     const templates = await this.prisma.checklistTemplate.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        isArchived: includeArchived ? true : false,
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         items: {
@@ -56,7 +89,14 @@ export class ChecklistsService {
       },
     });
 
-    return templates.map((template) => this.toSummary(template));
+    const usageCounts = await this.getUsageCounts(
+      tenantId,
+      templates.map((template) => template.id),
+    );
+
+    return templates.map((template) =>
+      this.toSummary(template, usageCounts.get(template.id)),
+    );
   }
 
   async createTemplate(dto: CreateChecklistTemplateDto): Promise<ChecklistTemplateSummary> {
@@ -108,7 +148,7 @@ export class ChecklistsService {
       itemCount: template.items.length,
     });
 
-    return this.toSummary(template);
+    return this.toSummary(template, { jobCount: 0, taskCount: 0 });
   }
 
   async updateTemplate(templateId: string, dto: UpdateChecklistTemplateDto): Promise<ChecklistTemplateSummary> {
@@ -121,7 +161,7 @@ export class ChecklistsService {
       },
     });
 
-    if (!template) {
+    if (!template || template.isArchived) {
       throw new BadRequestException('Checklist template not found');
     }
 
@@ -240,7 +280,12 @@ export class ChecklistsService {
       totalItems: updatedTemplate.items.length,
     });
 
-    return this.toSummary(updatedTemplate);
+    const usageCounts = await this.getUsageCounts(tenantId, [templateId]);
+
+    return this.toSummary(
+      updatedTemplate,
+      usageCounts.get(templateId) ?? { jobCount: 0, taskCount: 0 },
+    );
   }
 
   async applyTemplate(templateId: string, jobId: string): Promise<void> {
@@ -257,6 +302,12 @@ export class ChecklistsService {
 
     if (!template) {
       throw new BadRequestException('Checklist template not found');
+    }
+
+    if (template.isArchived) {
+      throw new BadRequestException(
+        'Cannot apply an archived checklist template',
+      );
     }
 
     const job = await this.prisma.job.findFirst({
@@ -343,14 +394,20 @@ export class ChecklistsService {
       throw new BadRequestException('Checklist template not found');
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.task.deleteMany({
-        where: {
-          checklistTemplateId: templateId,
-          tenantId,
-        },
-      });
+    const taskUsageCount = await this.prisma.task.count({
+      where: {
+        tenantId,
+        checklistTemplateId: templateId,
+      },
+    });
 
+    if (taskUsageCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete template while ${taskUsageCount} task${taskUsageCount === 1 ? '' : 's'} are using it. Remove or reassign those tasks first.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
       await tx.checklistTemplate.delete({
         where: { id: templateId },
       });
@@ -361,11 +418,112 @@ export class ChecklistsService {
     });
   }
 
-  private toSummary(template: ChecklistTemplateWithItems): ChecklistTemplateSummary {
+  async archiveTemplate(templateId: string): Promise<ChecklistTemplateSummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+
+    const template = await this.prisma.checklistTemplate.findFirst({
+      where: { id: templateId, tenantId },
+      include: {
+        items: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    if (!template) {
+      throw new BadRequestException('Checklist template not found');
+    }
+
+    if (template.isArchived) {
+      const usageCounts = await this.getUsageCounts(tenantId, [templateId]);
+      return this.toSummary(
+        template,
+        usageCounts.get(templateId) ?? { jobCount: 0, taskCount: 0 },
+      );
+    }
+
+    const updated = await this.prisma.checklistTemplate.update({
+      where: { id: templateId },
+      data: { isArchived: true },
+      include: {
+        items: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    await this.logTemplateActivity(tenantId, templateId, 'checklist.template_archived', {
+      name: template.name,
+    });
+
+    const usageCounts = await this.getUsageCounts(tenantId, [templateId]);
+
+    return this.toSummary(
+      updated,
+      usageCounts.get(templateId) ?? { jobCount: 0, taskCount: 0 },
+    );
+  }
+
+  async restoreTemplate(templateId: string): Promise<ChecklistTemplateSummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+
+    const template = await this.prisma.checklistTemplate.findFirst({
+      where: { id: templateId, tenantId },
+      include: {
+        items: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    if (!template) {
+      throw new BadRequestException('Checklist template not found');
+    }
+
+    if (!template.isArchived) {
+      const usageCounts = await this.getUsageCounts(tenantId, [templateId]);
+      return this.toSummary(
+        template,
+        usageCounts.get(templateId) ?? { jobCount: 0, taskCount: 0 },
+      );
+    }
+
+    const updated = await this.prisma.checklistTemplate.update({
+      where: { id: templateId },
+      data: { isArchived: false },
+      include: {
+        items: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    await this.logTemplateActivity(tenantId, templateId, 'checklist.template_restored', {
+      name: template.name,
+    });
+
+    const usageCounts = await this.getUsageCounts(tenantId, [templateId]);
+
+    return this.toSummary(
+      updated,
+      usageCounts.get(templateId) ?? { jobCount: 0, taskCount: 0 },
+    );
+  }
+
+  private toSummary(
+    template: ChecklistTemplateWithItems,
+    usage?: TemplateUsageStats,
+  ): ChecklistTemplateSummary {
+    const jobUsageCount = usage?.jobCount ?? 0;
+    const taskUsageCount = usage?.taskCount ?? 0;
+
     return {
       id: template.id,
       name: template.name,
       description: template.description,
+      isArchived: template.isArchived,
+      jobUsageCount,
+      taskUsageCount,
       createdAt: template.createdAt.toISOString(),
       updatedAt: template.updatedAt.toISOString(),
       items: template.items
@@ -376,6 +534,61 @@ export class ChecklistsService {
         }))
         .sort((a, b) => a.order - b.order),
     };
+  }
+
+  private async getUsageCounts(
+    tenantId: string,
+    templateIds: string[],
+  ): Promise<Map<string, TemplateUsageStats>> {
+    const stats = new Map<string, TemplateUsageStats>();
+    templateIds.forEach((id) =>
+      stats.set(id, {
+        jobCount: 0,
+        taskCount: 0,
+      }),
+    );
+
+    if (!templateIds.length) {
+      return stats;
+    }
+
+    const taskCounts = await this.prisma.task.groupBy({
+      by: ['checklistTemplateId'],
+      where: {
+        tenantId,
+        checklistTemplateId: { in: templateIds },
+      },
+      _count: {
+        _all: true,
+      },
+    });
+
+    for (const group of taskCounts) {
+      const entry = stats.get(group.checklistTemplateId);
+      if (entry) {
+        entry.taskCount = group._count._all;
+      }
+    }
+
+    const jobGroups = await this.prisma.task.groupBy({
+      by: ['checklistTemplateId', 'jobId'],
+      where: {
+        tenantId,
+        checklistTemplateId: { in: templateIds },
+      },
+      _count: {
+        _all: true,
+      },
+    });
+
+    for (const group of jobGroups) {
+      const entry = stats.get(group.checklistTemplateId);
+      if (entry) {
+        entry.jobCount += 1;
+      }
+    }
+
+    return stats;
   }
 
   private async logTemplateActivity(
@@ -395,6 +608,98 @@ export class ChecklistsService {
         meta: meta ? (meta as Prisma.JsonValue) : undefined,
       },
     });
+  }
+
+  async templateUsage(templateId: string): Promise<ChecklistTemplateUsage> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+
+    const template = await this.prisma.checklistTemplate.findFirst({
+      where: { id: templateId, tenantId },
+      select: { id: true, name: true },
+    });
+
+    if (!template) {
+      throw new BadRequestException('Checklist template not found');
+    }
+
+    const tasks = await this.prisma.task.findMany({
+      where: { tenantId, checklistTemplateId: templateId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        jobId: true,
+        job: {
+          select: {
+            id: true,
+            status: true,
+            estimate: { select: { number: true } },
+            lead: {
+              select: {
+                contact: {
+                  select: { name: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const jobsMap = new Map<string, ChecklistTemplateUsageJob>();
+    const SAMPLE_LIMIT = 3;
+
+    for (const task of tasks) {
+      if (!task.job) {
+        continue;
+      }
+
+      const existing = jobsMap.get(task.job.id);
+      const jobLabel =
+        task.job.lead?.contact?.name ??
+        task.job.estimate?.number ??
+        `Job ${task.job.id.slice(0, 6).toUpperCase()}`;
+
+      if (existing) {
+        existing.taskCount += 1;
+        if (existing.sampleTasks.length < SAMPLE_LIMIT) {
+          existing.sampleTasks.push({
+            id: task.id,
+            title: task.title,
+            status: task.status,
+          });
+        }
+      } else {
+        jobsMap.set(task.job.id, {
+          jobId: task.job.id,
+          jobStatus: task.job.status,
+          jobLabel,
+          taskCount: 1,
+          sampleTasks: [
+            {
+              id: task.id,
+              title: task.title,
+              status: task.status,
+            },
+          ],
+        });
+      }
+    }
+
+    const jobs = Array.from(jobsMap.values()).sort((a, b) =>
+      a.jobLabel.localeCompare(b.jobLabel),
+    );
+
+    return {
+      template: {
+        id: template.id,
+        name: template.name,
+      },
+      totalJobs: jobs.length,
+      totalTasks: tasks.length,
+      jobs,
+    };
   }
 
   async templateActivity(templateId: string): Promise<ChecklistTemplateActivityEntry[]> {

@@ -7,16 +7,19 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ChecklistsService,
   ChecklistTemplateActivityEntry,
   ChecklistTemplateSummary,
+  ChecklistTemplateUsage,
 } from './checklists.service';
 import { CreateChecklistTemplateDto } from './dto/create-template.dto';
 import { UpdateChecklistTemplateDto } from './dto/update-template.dto';
 import { TenantGuard } from '../tenancy/tenant.guard';
+import { ListTemplatesDto } from './dto/list-templates.dto';
 
 @Controller('checklists')
 @UseGuards(TenantGuard)
@@ -24,8 +27,10 @@ export class ChecklistsController {
   constructor(private readonly checklistsService: ChecklistsService) {}
 
   @Get('templates')
-  async listTemplates(): Promise<ChecklistTemplateSummary[]> {
-    return this.checklistsService.listTemplates();
+  async listTemplates(
+    @Query() query: ListTemplatesDto,
+  ): Promise<ChecklistTemplateSummary[]> {
+    return this.checklistsService.listTemplates(Boolean(query.archived));
   }
 
   @Post('templates')
@@ -69,6 +74,13 @@ export class ChecklistsController {
     return this.checklistsService.templateActivity(templateId);
   }
 
+  @Get('templates/:id/usage')
+  async templateUsage(
+    @Param('id') templateId: string,
+  ): Promise<ChecklistTemplateUsage> {
+    return this.checklistsService.templateUsage(templateId);
+  }
+
   @Delete('templates/:id/apply')
   async removeTemplate(
     @Param('id') templateId: string,
@@ -80,5 +92,19 @@ export class ChecklistsController {
 
     await this.checklistsService.removeTemplate(templateId, jobId);
     return { removed: true };
+  }
+
+  @Post('templates/:id/archive')
+  async archiveTemplate(
+    @Param('id') templateId: string,
+  ): Promise<ChecklistTemplateSummary> {
+    return this.checklistsService.archiveTemplate(templateId);
+  }
+
+  @Post('templates/:id/restore')
+  async restoreTemplate(
+    @Param('id') templateId: string,
+  ): Promise<ChecklistTemplateSummary> {
+    return this.checklistsService.restoreTemplate(templateId);
   }
 }

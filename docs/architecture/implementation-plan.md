@@ -34,16 +34,21 @@
   - `/estimates/new` route delivers draft authoring with line items, status, notes (Phase 2 baseline).
   - `/estimates/[id]` detail exposes status transitions and job conversion workflow.
   - Send + approval flows capture recipient metadata, generate + attach PDFs, log activity, and unlock job scheduling.
+  - Delivery panel surfaces last send timestamp, subject, and SMTP message ID alongside the freshest PDF so teams have proof of delivery.
   - Template library delivers `estimate_templates` + `estimate_template_items`, CRUD/apply endpoints, and UI to load, reapply, or clear templates in both the creator and detail flows with activity logging.
 - Convert Estimates → Jobs; scheduling scaffolding; job status transitions.
   - Estimate detail now enforces approval-first scheduling, adds resend/record guardrails, and surfaces inline scheduling errors.
   - Lead detail CTAs deep-link into the builder and freshly created estimates redirect to their detail view for conversion.
 - Implement Tasks & Checklists with templates and per-job instantiation.
   - Job cards highlight applied templates in the header with inline remove/replace controls.
+  - Crew My Day route filters jobs by assignee via `/jobs?assigneeId=` and supports inline task completion with optimistic updates.
+  - Template manager supports archive/restore workflows, preventing accidental deletion while removing options from job application.
+  - Usage insights surface current job/task counts with detailed drill-down so admins know why deletion is blocked and where a template is still active.
 - Deliver Files & Photos flow (upload, albums, EXIF, resizing).
   - Files service issues presigned uploads, persists metadata, and logs activity when attachments are added or removed.
   - Work board job cards now support inline uploads, previews, and removal for site photos and documents.
   - Estimate detail page exposes attachments so proposals carry supporting documents through approval.
+  - Upload pipeline records scan/processing state and the UI blocks preview/download until antivirus checks succeed.
 
 **Exit Criteria**
 - Admin can advance a lead to an approved estimate and job creation.

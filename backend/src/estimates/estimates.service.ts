@@ -10,6 +10,7 @@ import { ApproveEstimateDto } from './dto/approve-estimate.dto';
 import { EstimateMailerService } from './estimate-mailer.service';
 import { StorageService } from '../storage/storage.service';
 import PDFDocument from 'pdfkit';
+import { FileProcessingService } from '../files/file-processing.service';
 
 type EstimateWithRelations = Prisma.EstimateGetPayload<{
   include: {
@@ -86,6 +87,8 @@ export interface EstimateApprovalSnapshot {
   approverEmail?: string | null;
   message?: string | null;
   emailSubject?: string | null;
+  emailMessageId?: string | null;
+  sentAt?: string | null;
 }
 
 @Injectable()
@@ -97,6 +100,7 @@ export class EstimatesService {
     private readonly requestContext: RequestContextService,
     private readonly storage: StorageService,
     private readonly estimateMailer: EstimateMailerService,
+    private readonly fileProcessing: FileProcessingService,
   ) {}
 
   async list(params: ListEstimatesDto): Promise<EstimateSummary[]> {
@@ -542,6 +546,7 @@ export class EstimatesService {
             subject: emailResult.subject,
             htmlPreview: emailResult.htmlPreview,
             sentAt: now.toISOString(),
+            messageId: emailResult.messageId ?? null,
           } as Prisma.JsonObject,
         },
       });
@@ -578,7 +583,19 @@ export class EstimatesService {
           },
         });
 
-        pdfFileId = fileRecord.id;
+        try {
+          const processed = await this.fileProcessing.processUploadedFile(
+            fileRecord.id,
+          );
+          pdfFileId = processed.id;
+        } catch (processingError) {
+          pdfFileId = fileRecord.id;
+          this.logger.warn(
+            `Failed to mark generated estimate PDF as scanned for ${id}: ${String(
+              (processingError as Error)?.message ?? processingError,
+            )}`,
+          );
+        }
       } catch (error) {
         this.logger.warn(
           `Failed to persist estimate PDF for ${id}: ${String(
@@ -593,6 +610,7 @@ export class EstimatesService {
       status: EstimateStatus.SENT,
       recipientEmail: dto.recipientEmail,
       subject: emailResult.subject,
+      messageId: emailResult.messageId ?? null,
       pdfFileId,
     });
 
@@ -780,6 +798,10 @@ export class EstimatesService {
             : undefined,
           message: signature?.message ? String(signature.message) : undefined,
           emailSubject: signature?.subject ? String(signature.subject) : undefined,
+          emailMessageId: signature?.messageId
+            ? String(signature.messageId)
+            : undefined,
+          sentAt: this.normalizeIsoString(signature?.sentAt),
         };
       })
       .sort(
@@ -795,6 +817,17 @@ export class EstimatesService {
       return null;
     }
     return value as Record<string, unknown>;
+  }
+
+  private normalizeIsoString(value: unknown): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+    const parsed = Date.parse(String(value));
+    if (Number.isNaN(parsed)) {
+      return undefined;
+    }
+    return new Date(parsed).toISOString();
   }
 
   private resolveApprovalTimestamp(

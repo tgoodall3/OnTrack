@@ -4,7 +4,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FileType, Prisma } from '@prisma/client';
+import { FileType, FileScanStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -12,6 +12,7 @@ import { CreateUploadDto } from './dto/create-upload.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
 import { AppConfig } from '../config/app.config';
 import { RequestContextService } from '../context/request-context.service';
+import { FileProcessingService } from './file-processing.service';
 
 type FileScope = {
   jobId?: string;
@@ -23,7 +24,7 @@ type FileScopeValidation = FileScope & {
   pathSegments: string[];
 };
 
-type FileWithRelations = Prisma.FileGetPayload<{
+export type FileWithRelations = Prisma.FileGetPayload<{
   include: {
     uploadedBy: {
       select: {
@@ -43,6 +44,10 @@ export interface FileSummary {
   fileName: string;
   fileSize?: number | null;
   mimeType?: string | null;
+  scanStatus: FileScanStatus;
+  scanMessage?: string | null;
+  processedAt?: string | null;
+  isProcessing: boolean;
   jobId?: string | null;
   estimateId?: string | null;
   invoiceId?: string | null;
@@ -63,6 +68,7 @@ export class FilesService {
     private readonly storage: StorageService,
     private readonly requestContext: RequestContextService,
     private readonly configService: ConfigService<AppConfig>,
+    private readonly fileProcessing: FileProcessingService,
   ) {
     const storageConfig = this.configService.get('storage', { infer: true });
     this.maxUploadBytes = storageConfig.maxUploadBytes;
@@ -121,6 +127,8 @@ export class FilesService {
       url: this.storage.resolvePublicUrl(dto.key),
       type: fileType,
       metadata,
+      scanStatus: FileScanStatus.PENDING,
+      scanMessage: 'Awaiting malware scan',
     };
 
     if (scope.jobId) {
@@ -153,6 +161,17 @@ export class FilesService {
       },
     });
 
+    let processedFile: FileWithRelations = file;
+    try {
+      processedFile = await this.fileProcessing.processUploadedFile(file.id);
+    } catch (error) {
+      this.logger.warn(
+        `File processing failed for ${file.id}: ${String(
+          (error as Error)?.message ?? error,
+        )}`,
+      );
+    }
+
     await Promise.all([
       scope.jobId
         ? this.logJobActivity(tenantId, scope.jobId, 'job.file_uploaded', {
@@ -177,7 +196,7 @@ export class FilesService {
         : undefined,
     ]);
 
-    return this.toSummary(file);
+    return this.toSummary(processedFile);
   }
 
   async listForJob(jobId: string): Promise<FileSummary[]> {
@@ -404,6 +423,19 @@ export class FilesService {
 
   private toSummary(file: FileWithRelations): FileSummary {
     const metadata = this.toRecord(file.metadata);
+    const processedAt =
+      file.processedAt instanceof Date ? file.processedAt.toISOString() : null;
+    const scanMessage =
+      typeof file.scanMessage === 'string' && file.scanMessage.trim().length > 0
+        ? file.scanMessage
+        : null;
+    const fileSize =
+      typeof metadata?.fileSize === 'number' ? metadata.fileSize : null;
+    const mimeType =
+      typeof metadata?.mimeType === 'string' ? metadata.mimeType : null;
+    const isProcessing =
+      file.scanStatus === FileScanStatus.PENDING && !processedAt;
+
     return {
       id: file.id,
       url: file.url,
@@ -411,10 +443,12 @@ export class FilesService {
       createdAt: file.createdAt.toISOString(),
       fileName:
         typeof metadata?.fileName === 'string' ? metadata.fileName : 'File',
-      fileSize:
-        typeof metadata?.fileSize === 'number' ? metadata.fileSize : null,
-      mimeType:
-        typeof metadata?.mimeType === 'string' ? metadata.mimeType : null,
+      fileSize,
+      mimeType,
+      scanStatus: file.scanStatus,
+      scanMessage,
+      processedAt,
+      isProcessing,
       jobId: file.jobId,
       estimateId: file.estimateId,
       invoiceId: file.invoiceId,

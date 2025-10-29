@@ -2,7 +2,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, History, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  Briefcase,
+  CheckSquare,
+  History,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  Undo2,
+  X,
+} from "lucide-react";
 import type { ChecklistTemplate } from "@/hooks/use-checklist-templates";
 import {
   useChecklistTemplates,
@@ -10,6 +24,9 @@ import {
   useDeleteChecklistTemplate,
   useUpdateChecklistTemplate,
   useChecklistTemplateActivity,
+  useChecklistTemplateUsage,
+  useArchiveChecklistTemplate,
+  useRestoreChecklistTemplate,
   ChecklistTemplateActivityEntry,
 } from "@/hooks/use-checklist-templates";
 import { useToast } from "@/components/ui/use-toast";
@@ -42,9 +59,17 @@ const createEditableItem = (item?: { id?: string; title?: string }): EditableIte
 export default function ChecklistsPage() {
   const { toast } = useToast();
   const { data: templates, isLoading, error, refetch } = useChecklistTemplates();
+  const {
+    data: archivedTemplates,
+    isLoading: isLoadingArchived,
+    error: archivedError,
+    refetch: refetchArchived,
+  } = useChecklistTemplates({ archived: true });
   const createMutation = useCreateChecklistTemplate();
   const updateMutation = useUpdateChecklistTemplate();
   const deleteMutation = useDeleteChecklistTemplate();
+  const archiveMutation = useArchiveChecklistTemplate();
+  const restoreMutation = useRestoreChecklistTemplate();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -58,7 +83,16 @@ export default function ChecklistsPage() {
   const [editingError, setEditingError] = useState<string | null>(null);
 
   const deletingTemplateId = deleteMutation.variables?.id ?? null;
-  const editingIsPending = updateMutation.isPending || deleteMutation.isPending;
+  const archivingTemplateId = archiveMutation.variables?.id ?? null;
+  const restoringTemplateId = restoreMutation.variables?.id ?? null;
+
+  const editingIsPending =
+    updateMutation.isPending ||
+    deleteMutation.isPending ||
+    archiveMutation.isPending ||
+    restoreMutation.isPending;
+
+  const [showArchived, setShowArchived] = useState(false);
 
   const handleAddItem = () => {
     setItems((current) => [...current, createBlankItem()]);
@@ -254,8 +288,19 @@ export default function ChecklistsPage() {
   };
 
   const handleDeleteTemplate = (template: ChecklistTemplate) => {
+    if (template.taskUsageCount > 0) {
+      toast({
+        variant: "destructive",
+        title: "Template still in use",
+        description: `Remove ${template.taskUsageCount} task${
+          template.taskUsageCount === 1 ? "" : "s"
+        } that use this template or archive it instead.`,
+      });
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Delete "${template.name}"? This will remove the template and detach it from any active jobs.`,
+      `Delete "${template.name}"? This action cannot be undone and is only available once no tasks use this template.`,
     );
     if (!confirmed) {
       return;
@@ -274,11 +319,70 @@ export default function ChecklistsPage() {
             resetEditingState();
           }
           void refetch();
+          void refetchArchived();
         },
         onError: (mutationError) => {
           toast({
             variant: "destructive",
             title: "Template delete failed",
+            description: mutationError.message,
+          });
+        },
+      },
+    );
+  };
+
+  const handleArchiveTemplate = (template: ChecklistTemplate) => {
+    const confirmed = window.confirm(
+      `Archive "${template.name}"? Crews will no longer see it in Apply Checklist, but existing jobs keep their tasks.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    archiveMutation.mutate(
+      { id: template.id },
+      {
+        onSuccess: () => {
+          toast({
+            variant: "success",
+            title: "Template archived",
+            description: `${template.name} moved to archives.`,
+          });
+          if (editingTemplateId === template.id) {
+            resetEditingState();
+          }
+          void refetch();
+          void refetchArchived();
+        },
+        onError: (mutationError) => {
+          toast({
+            variant: "destructive",
+            title: "Archive failed",
+            description: mutationError.message,
+          });
+        },
+      },
+    );
+  };
+
+  const handleRestoreTemplate = (template: ChecklistTemplate) => {
+    restoreMutation.mutate(
+      { id: template.id },
+      {
+        onSuccess: () => {
+          toast({
+            variant: "success",
+            title: "Template restored",
+            description: `${template.name} is available to crews again.`,
+          });
+          void refetch();
+          void refetchArchived();
+        },
+        onError: (mutationError) => {
+          toast({
+            variant: "destructive",
+            title: "Restore failed",
             description: mutationError.message,
           });
         },
@@ -441,18 +545,29 @@ export default function ChecklistsPage() {
                 {isEditing ? (
                   <div className="space-y-4">
                     <header className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
+                      <div className="space-y-2">
                         <p className="text-lg font-semibold text-foreground">Editing {template.name}</p>
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Reorder items and update the copy before saving.
                         </p>
+                        <TemplateUsageBadges
+                          jobCount={template.jobUsageCount}
+                          taskCount={template.taskUsageCount}
+                        />
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleDeleteTemplate(template)}
                           className="inline-flex items-center gap-2 rounded-full border border-accent px-3 py-1 text-xs font-semibold uppercase tracking-wide text-accent transition hover:bg-accent/10 disabled:opacity-60"
-                          disabled={editingIsPending || deletingTemplateId === template.id}
+                          disabled={
+                            editingIsPending || deletingTemplateId === template.id || template.taskUsageCount > 0
+                          }
+                          title={
+                            template.taskUsageCount > 0
+                              ? "Remove checklist tasks from jobs or archive the template to keep history."
+                              : undefined
+                          }
                         >
                           {deleteMutation.isPending && deletingTemplateId === template.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -472,6 +587,16 @@ export default function ChecklistsPage() {
                         </button>
                       </div>
                     </header>
+
+                    {template.taskUsageCount > 0 && (
+                      <div className="flex items-start gap-2 rounded-2xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                        <p>
+                          {template.taskUsageCount} task{template.taskUsageCount === 1 ? "" : "s"} currently use this
+                          template. Archive the template instead of deleting to keep job history.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="grid gap-4 md:grid-cols-2">
                       <label className="space-y-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -576,16 +701,25 @@ export default function ChecklistsPage() {
                       Save changes
                     </button>
 
+                    <TemplateUsageDetails
+                      templateId={template.id}
+                      jobCount={template.jobUsageCount}
+                      taskCount={template.taskUsageCount}
+                    />
                     <TemplateActivityFeed templateId={template.id} />
                   </div>
                 ) : (
                   <>
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
+                      <div className="space-y-2">
                         <p className="text-lg font-semibold text-foreground">{template.name}</p>
                         {template.description && (
                           <p className="text-sm text-muted-foreground">{template.description}</p>
                         )}
+                        <TemplateUsageBadges
+                          jobCount={template.jobUsageCount}
+                          taskCount={template.taskUsageCount}
+                        />
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-muted/30 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -601,9 +735,30 @@ export default function ChecklistsPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => handleArchiveTemplate(template)}
+                          className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
+                          disabled={archivingTemplateId === template.id && archiveMutation.isPending}
+                        >
+                          {archiveMutation.isPending && archivingTemplateId === template.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Archive className="h-3 w-3" aria-hidden="true" />
+                          )}
+                          Archive
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleDeleteTemplate(template)}
                           className="inline-flex items-center gap-2 rounded-full border border-accent px-3 py-1 text-xs font-semibold uppercase tracking-wide text-accent transition hover:bg-accent/10 disabled:opacity-60"
-                          disabled={deletingTemplateId === template.id && deleteMutation.isPending}
+                          disabled={
+                            template.taskUsageCount > 0 ||
+                            (deletingTemplateId === template.id && deleteMutation.isPending)
+                          }
+                          title={
+                            template.taskUsageCount > 0
+                              ? "Remove checklist tasks from jobs or archive the template first."
+                              : undefined
+                          }
                         >
                           {deleteMutation.isPending && deletingTemplateId === template.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -614,6 +769,15 @@ export default function ChecklistsPage() {
                         </button>
                       </div>
                     </div>
+                    {template.taskUsageCount > 0 && (
+                      <div className="flex items-start gap-2 rounded-2xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                        <p>
+                          {template.taskUsageCount} task{template.taskUsageCount === 1 ? "" : "s"} currently use this
+                          template. Archive it to preserve history or remove tasks before deleting.
+                        </p>
+                      </div>
+                    )}
                     <ul className="space-y-2 text-sm text-muted-foreground">
                       {template.items.map((item) => (
                         <li key={item.id} className="rounded-2xl bg-muted/30 px-3 py-2">
@@ -622,6 +786,11 @@ export default function ChecklistsPage() {
                       ))}
                     </ul>
 
+                    <TemplateUsageDetails
+                      templateId={template.id}
+                      jobCount={template.jobUsageCount}
+                      taskCount={template.taskUsageCount}
+                    />
                     <TemplateActivityFeed templateId={template.id} />
                   </>
                 )}
@@ -634,6 +803,244 @@ export default function ChecklistsPage() {
           </div>
         )}
       </section>
+
+      <section className="space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Archived templates</h2>
+            <p className="text-sm text-muted-foreground">
+              Keep legacy workflows on file or restore them when teams need them again.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowArchived((prev) => !prev)}
+            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+          >
+            {showArchived ? "Hide archived" : "Show archived"}
+          </button>
+        </header>
+
+        {archivedError && (
+          <div className="rounded-3xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent-foreground">
+            {archivedError.message}
+          </div>
+        )}
+
+        {!showArchived && !isLoadingArchived && (archivedTemplates?.length ?? 0) === 0 && (
+          <p className="rounded-3xl border border-dashed border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            No templates have been archived yet.
+          </p>
+        )}
+
+        {showArchived &&
+          (isLoadingArchived ? (
+            <div className="flex items-center gap-3 rounded-3xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Loading archived templates...
+            </div>
+          ) : archivedTemplates && archivedTemplates.length > 0 ? (
+            archivedTemplates.map((template) => (
+              <article
+                key={template.id}
+                className="space-y-4 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <p className="text-lg font-semibold text-foreground">{template.name}</p>
+                    {template.description && (
+                      <p className="text-sm text-muted-foreground">{template.description}</p>
+                    )}
+                    <TemplateUsageBadges
+                      jobCount={template.jobUsageCount}
+                      taskCount={template.taskUsageCount}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Archived
+                    </span>
+                    <span className="rounded-full bg-muted/30 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {template.items.length} item{template.items.length === 1 ? "" : "s"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRestoreTemplate(template)}
+                      className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
+                      disabled={restoringTemplateId === template.id && restoreMutation.isPending}
+                    >
+                      {restoreMutation.isPending && restoringTemplateId === template.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Undo2 className="h-3 w-3" aria-hidden="true" />
+                      )}
+                      Restore
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTemplate(template)}
+                      className="inline-flex items-center gap-2 rounded-full border border-accent px-3 py-1 text-xs font-semibold uppercase tracking-wide text-accent transition hover:bg-accent/10 disabled:opacity-60"
+                      disabled={
+                        template.taskUsageCount > 0 ||
+                        (deletingTemplateId === template.id && deleteMutation.isPending)
+                      }
+                      title={
+                        template.taskUsageCount > 0
+                          ? "Remove checklist tasks from jobs before deleting this archived template."
+                          : undefined
+                      }
+                    >
+                      {deleteMutation.isPending && deletingTemplateId === template.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" aria-hidden="true" />
+                      )}
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {template.taskUsageCount > 0 && (
+                  <div className="flex items-start gap-2 rounded-2xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                    <p>
+                      {template.taskUsageCount} task{template.taskUsageCount === 1 ? "" : "s"} still reference this
+                      template. Delete is disabled until those are reassigned.
+                    </p>
+                  </div>
+                )}
+
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {template.items.map((item) => (
+                    <li key={item.id} className="rounded-2xl bg-muted/30 px-3 py-2">
+                      <span className="font-semibold text-foreground">{item.title}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <TemplateUsageDetails
+                  templateId={template.id}
+                  jobCount={template.jobUsageCount}
+                  taskCount={template.taskUsageCount}
+                />
+                <TemplateActivityFeed templateId={template.id} />
+              </article>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-dashed border-border/80 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+              Nothing archived yet. Templates you archive will appear here for safekeeping.
+            </div>
+          ))}
+      </section>
+    </div>
+  );
+}
+
+function TemplateUsageBadges({ jobCount, taskCount }: { jobCount: number; taskCount: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-3 py-1">
+        <Briefcase className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+        {formatCountLabel(jobCount, "job")}
+      </span>
+      <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-3 py-1">
+        <CheckSquare className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+        {formatCountLabel(taskCount, "task")}
+      </span>
+    </div>
+  );
+}
+
+function TemplateUsageDetails({
+  templateId,
+  jobCount,
+  taskCount,
+}: {
+  templateId: string;
+  jobCount: number;
+  taskCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data, isLoading, isFetching, error, refetch } = useChecklistTemplateUsage(open ? templateId : null, open);
+
+  const totalJobs = data?.totalJobs ?? jobCount;
+  const totalTasks = data?.totalTasks ?? taskCount;
+  const jobs = data?.jobs ?? [];
+
+  return (
+    <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+        >
+          {open ? "Hide usage" : "View usage"}
+          {(isLoading || isFetching) && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+        </button>
+        {open && (
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+            {formatCountLabel(totalTasks, "task")} across {formatCountLabel(totalJobs, "job")}
+          </span>
+        )}
+        {open && (
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
+            disabled={isFetching}
+          >
+            {isFetching ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            Refresh
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-2">
+          {error ? (
+            <div className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-[11px] text-accent-foreground">
+              {error.message}
+            </div>
+          ) : jobs.length === 0 ? (
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70">
+              Not applied to any jobs yet.
+            </p>
+          ) : (
+            jobs.map((job) => (
+              <div
+                key={job.jobId}
+                className="space-y-2 rounded-xl border border-border/60 bg-background/60 p-3 text-[11px] text-muted-foreground"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-foreground">{job.jobLabel}</span>
+                  <span className="rounded-full bg-muted/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {formatStatusLabel(job.jobStatus)}
+                  </span>
+                </div>
+                <p className="font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  {formatCountLabel(job.taskCount, "task")} linked
+                </p>
+                {job.sampleTasks.length > 0 && (
+                  <ul className="space-y-1">
+                    {job.sampleTasks.map((task) => (
+                      <li
+                        key={task.id}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-2 py-1 text-[11px]"
+                      >
+                        <span className="font-semibold text-foreground">{task.title}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          {formatStatusLabel(task.status)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -675,7 +1082,7 @@ function TemplateActivityFeed({ templateId }: { templateId: string }) {
                 <li key={entry.id} className="rounded-xl border border-border/60 bg-background/50 px-3 py-2">
                   <p className="font-semibold text-foreground">{describeTemplateActivity(entry)}</p>
                   <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">
-                    {formatTemplateActor(entry)} • {formatRelativeTimeFromNow(entry.createdAt)}
+                    {formatTemplateActor(entry)} | {formatRelativeTimeFromNow(entry.createdAt)}
                   </p>
                 </li>
               ))}
@@ -686,6 +1093,18 @@ function TemplateActivityFeed({ templateId }: { templateId: string }) {
       )}
     </div>
   );
+}
+
+function formatCountLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function formatStatusLabel(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map(capitalize)
+    .join(" ");
 }
 
 function describeTemplateActivity(entry: ChecklistTemplateActivityEntry): string {

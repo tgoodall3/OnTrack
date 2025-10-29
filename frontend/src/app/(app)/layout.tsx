@@ -52,15 +52,17 @@ export default function AppLayout({ children }: PropsWithChildren) {
       <div className="relative flex min-h-screen flex-col bg-background text-foreground">
         <ToastContainer />
         <header className="glass-panel border-b border-border/60">
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 md:py-4">
+          <div className="mx-auto flex w-full max-w-7xl items-center gap-4 px-4 py-3 sm:gap-6 sm:px-6 md:py-4">
             <div className="flex items-center gap-4 sm:gap-6">
               <Logo />
             </div>
-            <div className="hidden md:block">
+            <div className="hidden flex-1 md:block">
               {/* <AppNavigation /> */}
             </div>
-            <HeaderActions />
+            <div className="ml-auto flex items-center gap-3">
               <MobileNav />
+              <HeaderActions />
+            </div>
           </div>
         </header>
 

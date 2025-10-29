@@ -8,6 +8,7 @@ import { ArrowLeft, CalendarClock, ClipboardList, Layers, Loader2, Timer } from 
 import { useToast } from "@/components/ui/use-toast";
 import { useEstimateTemplates, useApplyEstimateTemplate } from "@/hooks/use-estimate-templates";
 import { FilesSection } from "@/components/files/files-section";
+import { useEstimateFiles } from "@/hooks/use-files";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -34,6 +35,8 @@ type EstimateApprovalEntry = {
   approverEmail?: string | null;
   message?: string | null;
   emailSubject?: string | null;
+  emailMessageId?: string | null;
+  sentAt?: string | null;
 };
 
 type EstimateDetail = {
@@ -205,7 +208,7 @@ async function scheduleJob(payload: ScheduleJobInput): Promise<CreatedJob> {
 export default function EstimateDetailPage() {
   const params = useParams<{ id: string }>();
   const estimateId = params.id;
-  const { toast } = useToast();
+const { toast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: templateOptions, isLoading: templatesLoading, error: templatesError } = useEstimateTemplates();
@@ -312,6 +315,22 @@ export default function EstimateDetailPage() {
       setApproveFormError(mutationError.message);
     },
   });
+
+  const { data: estimateFiles, isLoading: estimateFilesLoading } = useEstimateFiles(estimateId);
+  const latestPdfAttachment = useMemo(() => {
+    if (!estimateFiles || estimateFiles.length === 0) {
+      return null;
+    }
+    return (
+      [...estimateFiles]
+        .filter(
+          (file) =>
+            file.type === "DOCUMENT" &&
+            (file.mimeType?.toLowerCase().includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf")),
+        )
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+    );
+  }, [estimateFiles]);
 
   const updateTemplateMutation = useMutation<EstimateDetail, Error, { templateId: string | null }>({
     mutationFn: ({ templateId }) => updateEstimateTemplateRequest(estimateId, templateId),
@@ -456,6 +475,7 @@ export default function EstimateDetailPage() {
         ...prev,
         email: estimate.latestApproval?.recipientEmail ?? prev.email,
         name: estimate.latestApproval?.recipientName ?? prev.name,
+        message: estimate.latestApproval?.message ?? prev.message,
       }));
     }
 
@@ -505,6 +525,10 @@ export default function EstimateDetailPage() {
   const approvalHistory = estimate.approvalHistory ?? [];
   const latestSend = estimate.latestApproval?.status === "SENT" ? estimate.latestApproval : null;
   const latestApprovalRecord = estimate.latestApproval?.status === "APPROVED" ? estimate.latestApproval : null;
+  const latestSendTimestamp = latestSend?.sentAt ?? latestSend?.createdAt ?? null;
+  const latestSendRecipient = latestSend
+    ? latestSend.recipientName ?? latestSend.recipientEmail ?? "customer"
+    : null;
   const sendButtonLabel = sendEstimateMutation.isPending
     ? "Sending..."
     : latestSend
@@ -704,14 +728,50 @@ export default function EstimateDetailPage() {
           <div className="space-y-3 rounded-3xl border border-border bg-surface p-6 shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Customer delivery</h3>
             {latestSend ? (
-              <p className="text-xs text-muted-foreground">
-                Last sent to {latestSend.recipientEmail ?? "the customer"} on {formatDate(latestSend.createdAt)}.
-              </p>
+              <div className="space-y-1 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-xs">
+                <p className="font-semibold text-foreground">
+                  Delivered{" "}
+                  {latestSendTimestamp ? formatRelativeTimeFromNow(latestSendTimestamp) : formatDate(latestSend.createdAt)}
+                </p>
+                <p className="text-muted-foreground/80">
+                  Sent to {latestSendRecipient ?? "the customer"}.
+                </p>
+                {latestSend.emailSubject && (
+                  <p className="text-muted-foreground/70">Subject: {latestSend.emailSubject}</p>
+                )}
+                {latestSend.message && (
+                  <p className="text-muted-foreground/70">Message: {latestSend.message}</p>
+                )}
+                {latestSend.emailMessageId && (
+                  <p className="font-mono text-[11px] text-muted-foreground/70">
+                    Message ID: {latestSend.emailMessageId}
+                  </p>
+                )}
+              </div>
             ) : (
               <p className="text-xs">
                 Email the estimate to the customer when you are ready to review or request approval.
               </p>
             )}
+            {estimateFilesLoading ? (
+              <p className="mt-2 text-xs text-muted-foreground">Loading attachments...</p>
+            ) : latestPdfAttachment ? (
+              <div className="mt-3 space-y-1 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-foreground">Latest PDF</span>
+                  <span>{formatRelativeTimeFromNow(latestPdfAttachment.createdAt)}</span>
+                </div>
+                <a
+                  href={latestPdfAttachment.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={latestPdfAttachment.fileName}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+                >
+                  Download {latestPdfAttachment.fileName}
+                </a>
+              </div>
+            ) : null}
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -856,7 +916,7 @@ export default function EstimateDetailPage() {
                 <p className="font-semibold text-foreground">Job scheduled</p>
                 <p className="text-xs">
                   Status: {estimate.job.status.replace("_", " ").toLowerCase()}
-                  {estimate.job.scheduledStart ? ` • ${formatDate(estimate.job.scheduledStart)}` : ""}
+                  {estimate.job.scheduledStart ? ` - ${formatDate(estimate.job.scheduledStart)}` : ""}
                 </p>
                 <Link
                   href="/work"
@@ -1003,9 +1063,14 @@ function ApprovalHistoryCard({ entries }: { entries: EstimateApprovalEntry[] }) 
             <li key={entry.id} className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
               <p className="font-semibold text-foreground">{describeApprovalEntry(entry)}</p>
               <p className="text-xs text-muted-foreground/80">
-                {formatRelativeTimeFromNow(entry.createdAt)}
-                {entry.emailSubject ? ` • ${entry.emailSubject}` : ""}
+                {formatRelativeTimeFromNow(entry.sentAt ?? entry.createdAt)}
               </p>
+              {entry.emailSubject && (
+                <p className="text-xs text-muted-foreground/70">Subject: {entry.emailSubject}</p>
+              )}
+              {entry.emailMessageId && (
+                <p className="font-mono text-[11px] text-muted-foreground/60">Message ID: {entry.emailMessageId}</p>
+              )}
               {entry.message && (
                 <p className="mt-1 text-xs text-muted-foreground/70">{entry.message}</p>
               )}

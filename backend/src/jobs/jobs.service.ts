@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { JobStatus, Prisma } from '@prisma/client';
+import { EstimateStatus, JobStatus, Prisma, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestContextService } from '../context/request-context.service';
 import { ListJobsDto } from './dto/list-jobs.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
+import { CrewScheduleDto } from './dto/crew-schedule.dto';
 
 type JobWithRelations = Prisma.JobGetPayload<{
   include: {
@@ -26,6 +27,26 @@ type JobWithRelations = Prisma.JobGetPayload<{
       select: {
         id: true;
         address: true;
+      };
+    };
+    tasks: {
+      select: {
+        id: true;
+        title: true;
+        status: true;
+        dueAt: true;
+        checklistTemplateId: true;
+        metadata: true;
+        assignee: {
+          select: {
+            id: true;
+            name: true;
+            email: true;
+          };
+        };
+      };
+      orderBy: {
+        createdAt: 'asc';
       };
     };
   };
@@ -55,6 +76,21 @@ export interface JobSummary {
     id: string;
     address: string;
   };
+  tasks?: TaskSummary[];
+}
+
+export interface TaskSummary {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  dueAt?: string | null;
+  checklistTemplateId?: string | null;
+  metadata?: Prisma.JsonValue | null;
+  assignee?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  };
 }
 
 export interface JobActivityEntry {
@@ -67,6 +103,28 @@ export interface JobActivityEntry {
     email?: string | null;
   };
   meta?: Prisma.JsonValue | null;
+}
+
+export interface CrewScheduleEntry {
+  job: {
+    id: string;
+    status: JobStatus;
+    notes?: string | null;
+    scheduledStart: string | null;
+    scheduledEnd: string | null;
+    createdAt: string;
+    updatedAt: string;
+    leadName?: string | null;
+    propertyAddress?: string | null;
+  };
+  tasks: Array<{
+    id: string;
+    title: string;
+    status: TaskStatus;
+    dueAt: string | null;
+    metadata?: Prisma.JsonValue | null;
+    checklistTemplateId?: string | null;
+  }>;
 }
 
 @Injectable()
@@ -86,6 +144,14 @@ export class JobsService {
 
     if (params.leadId) {
       where.leadId = params.leadId;
+    }
+
+    if (params.assigneeId) {
+      where.tasks = {
+        some: {
+          assigneeId: params.assigneeId,
+        },
+      };
     }
 
     if (params.scheduledAfter || params.scheduledBefore) {
@@ -123,10 +189,124 @@ export class JobsService {
             address: true,
           },
         },
+        tasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueAt: true,
+            checklistTemplateId: true,
+            metadata: true,
+            assignee: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
     });
 
     return jobs.map((job) => this.toSummary(job));
+  }
+
+  async crewSchedule(
+    params: CrewScheduleDto,
+    currentUserId?: string,
+  ): Promise<CrewScheduleEntry[]> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const assigneeId =
+      params.assigneeId ??
+      currentUserId ??
+      this.requestContext.context.userId;
+
+    if (!assigneeId) {
+      throw new BadRequestException(
+        'Crew identity is required to load the schedule.',
+      );
+    }
+
+    const take = params.take ?? 25;
+
+    const taskFilter: Prisma.TaskWhereInput = {
+      assigneeId,
+    };
+
+    if (!params.includeCompleted) {
+      taskFilter.status = { not: TaskStatus.COMPLETE };
+    }
+
+    const jobs = await this.prisma.job.findMany({
+      where: {
+        tenantId,
+        status: { not: JobStatus.CANCELED },
+        tasks: {
+          some: {
+            assigneeId,
+          },
+        },
+      },
+      orderBy: [{ scheduledStart: 'asc' }, { createdAt: 'desc' }],
+      take,
+      include: {
+        lead: {
+          select: {
+            id: true,
+            stage: true,
+            contact: { select: { name: true } },
+          },
+        },
+        property: {
+          select: {
+            id: true,
+            address: true,
+          },
+        },
+        tasks: {
+          where: taskFilter,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueAt: true,
+            metadata: true,
+            checklistTemplateId: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    return jobs.map((job) => ({
+      job: {
+        id: job.id,
+        status: job.status,
+        notes: job.notes ?? null,
+        scheduledStart: job.scheduledStart?.toISOString() ?? null,
+        scheduledEnd: job.scheduledEnd?.toISOString() ?? null,
+        createdAt: job.createdAt.toISOString(),
+        updatedAt: job.updatedAt.toISOString(),
+        leadName: job.lead?.contact?.name ?? null,
+        propertyAddress: job.property
+          ? formatAddress(job.property.address)
+          : null,
+      },
+      tasks: job.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        dueAt: task.dueAt?.toISOString() ?? null,
+        metadata: task.metadata ?? null,
+        checklistTemplateId: task.checklistTemplateId ?? null,
+      })),
+    }));
   }
 
   async findOne(id: string): Promise<JobSummary> {
@@ -153,6 +333,26 @@ export class JobsService {
             address: true,
           },
         },
+        tasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueAt: true,
+            checklistTemplateId: true,
+            metadata: true,
+            assignee: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
     });
 
@@ -175,7 +375,7 @@ export class JobsService {
 
     if (dto.estimateId) {
       const estimate = await this.prisma.estimate.findFirst({
-        where: { id: dto.estimateId },
+        where: { id: dto.estimateId, tenantId },
         include: {
           lead: {
             select: {
@@ -188,6 +388,12 @@ export class JobsService {
 
       if (!estimate) {
         throw new BadRequestException('Estimate not found');
+      }
+
+      if (estimate.status !== EstimateStatus.APPROVED) {
+        throw new BadRequestException(
+          'Estimate must be approved before creating a job.',
+        );
       }
 
       leadId = estimate.leadId;
@@ -236,6 +442,26 @@ export class JobsService {
             address: true,
           },
         },
+        tasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueAt: true,
+            checklistTemplateId: true,
+            metadata: true,
+            assignee: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
     });
 
@@ -249,6 +475,38 @@ export class JobsService {
   }
 
   async update(id: string, dto: UpdateJobDto): Promise<JobSummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const existing = await this.prisma.job.findFirst({
+      where: { id, tenantId },
+      select: {
+        id: true,
+        estimate: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new BadRequestException('Job not found');
+    }
+
+    if (
+      existing.estimate &&
+      existing.estimate.status !== EstimateStatus.APPROVED
+    ) {
+      if (
+        (dto.scheduledStart ?? undefined) !== undefined ||
+        dto.status === JobStatus.SCHEDULED
+      ) {
+        throw new BadRequestException(
+          'Estimate must be approved before scheduling this job.',
+        );
+      }
+    }
+
     const data: Prisma.JobUpdateInput = {};
 
     if (dto.status) data.status = dto.status;
@@ -290,6 +548,26 @@ export class JobsService {
           select: {
             id: true,
             address: true,
+          },
+        },
+        tasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueAt: true,
+            checklistTemplateId: true,
+            metadata: true,
+            assignee: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
           },
         },
       },
@@ -390,6 +668,21 @@ export class JobsService {
             address: formatAddress(job.property.address),
           }
         : undefined,
+      tasks: job.tasks?.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        dueAt: task.dueAt ? task.dueAt.toISOString() : null,
+        checklistTemplateId: task.checklistTemplateId ?? null,
+        metadata: task.metadata ?? null,
+        assignee: task.assignee
+          ? {
+              id: task.assignee.id,
+              name: task.assignee.name,
+              email: task.assignee.email,
+            }
+          : undefined,
+      })),
     };
   }
 }

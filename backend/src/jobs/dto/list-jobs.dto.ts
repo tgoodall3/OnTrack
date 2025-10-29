@@ -20,6 +20,10 @@ export class ListJobsDto {
   leadId?: string;
 
   @IsOptional()
+  @IsString()
+  assigneeId?: string;
+
+  @IsOptional()
   @IsDateString()
   scheduledAfter?: string;
 

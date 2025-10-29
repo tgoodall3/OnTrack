@@ -21,6 +21,8 @@ type EstimateApprovalEntry = {
   recipientEmail?: string | null;
   approverName?: string | null;
   emailSubject?: string | null;
+  emailMessageId?: string | null;
+  sentAt?: string | null;
 };
 
 type EstimateSummary = {
@@ -297,7 +299,7 @@ export default function EstimatesPage() {
       {showLoading ? (
         <div className="flex items-center gap-3 rounded-3xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          Loading estimates…
+          Loading estimates...
         </div>
       ) : !hasData ? (
         <div className="rounded-3xl border border-dashed border-border/80 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
@@ -322,7 +324,7 @@ export default function EstimatesPage() {
                     </Link>
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {estimate.lead.contactName ?? "Unnamed contact"} · {estimate.lead.stage.replace("_", " ")}
+                    {estimate.lead.contactName ?? "Unnamed contact"} - {estimate.lead.stage.replace("_", " ")}
                   </p>
                   {estimate.notes && (
                     <p className="mt-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
@@ -361,8 +363,8 @@ export default function EstimatesPage() {
               <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 {estimate.job ? (
                   <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold text-foreground">
-                    Job scheduled · {estimate.job.status.replace("_", " ")}
-                    {estimate.job.scheduledStart && ` · ${formatDate(estimate.job.scheduledStart)}`}
+                    Job scheduled - {estimate.job.status.replace("_", " ")}
+                    {estimate.job.scheduledStart && ` - ${formatDate(estimate.job.scheduledStart)}`}
                   </span>
                  ) : (
                    <>
@@ -452,7 +454,7 @@ function LineItemRow({ item }: { item: EstimateSummary["lineItems"][number] }) {
       <div>
         <p className="font-medium text-foreground">{item.description}</p>
         <p className="text-xs">
-          Qty {item.quantity} × {formatCurrency(item.unitPrice)}
+          Qty {item.quantity} x {formatCurrency(item.unitPrice)}
         </p>
       </div>
       <p className="text-sm font-semibold text-foreground">{formatCurrency(item.total)}</p>

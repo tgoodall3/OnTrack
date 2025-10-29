@@ -9,20 +9,40 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { JobActivityEntry, JobsService, JobSummary } from './jobs.service';
+import {
+  CrewScheduleEntry,
+  JobActivityEntry,
+  JobsService,
+  JobSummary,
+} from './jobs.service';
 import { ListJobsDto } from './dto/list-jobs.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { TenantGuard } from '../tenancy/tenant.guard';
+import { CrewScheduleDto } from './dto/crew-schedule.dto';
+import { RequestContextService } from '../context/request-context.service';
 
 @Controller('jobs')
 @UseGuards(TenantGuard)
 export class JobsController {
-  constructor(private readonly jobsService: JobsService) {}
+  constructor(
+    private readonly jobsService: JobsService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   @Get()
   async list(@Query() query: ListJobsDto): Promise<JobSummary[]> {
     return this.jobsService.list(query);
+  }
+
+  @Get('crew/schedule')
+  async crewSchedule(
+    @Query() query: CrewScheduleDto,
+  ): Promise<CrewScheduleEntry[]> {
+    return this.jobsService.crewSchedule(
+      query,
+      this.requestContext.context.userId,
+    );
   }
 
   @Get(':id')
