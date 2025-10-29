@@ -3,9 +3,9 @@
   "orgId": "",
   "settings": {
     "framework": "nextjs",
-    "buildCommand": "pnpm build",
+    "rootDirectory": "frontend",
+    "buildCommand": "pnpm --filter @ontrack/web build",
     "installCommand": "pnpm install",
-    "outputDirectory": "frontend/.next",
-    "rootDirectory": "frontend"
+    "outputDirectory": ".next"
   }
 }
