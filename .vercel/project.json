@@ -1,0 +1,11 @@
+{
+  "projectId": "",
+  "orgId": "",
+  "settings": {
+    "framework": "nextjs",
+    "buildCommand": "pnpm build",
+    "installCommand": "pnpm install",
+    "outputDirectory": "frontend/.next",
+    "rootDirectory": "frontend"
+  }
+}
