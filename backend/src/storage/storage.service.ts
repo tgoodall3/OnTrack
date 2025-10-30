@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -7,6 +8,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppConfig } from '../config/app.config';
+import { Readable } from 'node:stream';
 
 export interface PresignedUpload {
   url: string;
@@ -118,5 +120,59 @@ export class StorageService {
       return `${this.publicUrl.replace(/\/$/, '')}/${normalizedKey}`;
     }
     return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${normalizedKey}`;
+  }
+
+  async getObject(key: string): Promise<Buffer> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    const response = await this.s3Client.send(command);
+    const { Body } = response;
+
+    if (!Body) {
+      throw new Error(`Object ${key} returned an empty response body.`);
+    }
+
+    return this.toBuffer(Body);
+  }
+
+  private async toBuffer(body: unknown): Promise<Buffer> {
+    if (body instanceof Readable) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of body) {
+        chunks.push(
+          typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk),
+        );
+      }
+      return Buffer.concat(chunks);
+    }
+
+    if (body instanceof Uint8Array) {
+      return Buffer.from(body);
+    }
+
+    if (
+      typeof (body as { transformToByteArray?: () => Promise<Uint8Array> })
+        ?.transformToByteArray === 'function'
+    ) {
+      const array = await (
+        body as { transformToByteArray: () => Promise<Uint8Array> }
+      ).transformToByteArray();
+      return Buffer.from(array);
+    }
+
+    if (
+      typeof (body as { arrayBuffer?: () => Promise<ArrayBuffer> })?.arrayBuffer ===
+      'function'
+    ) {
+      const arrayBuffer = await (
+        body as { arrayBuffer: () => Promise<ArrayBuffer> }
+      ).arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+
+    throw new Error('Unsupported S3 response body type.');
   }
 }

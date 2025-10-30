@@ -21,6 +21,17 @@ export type EstimateTemplateSummary = {
   items: EstimateTemplateItem[];
 };
 
+export type EstimateTemplatePayload = {
+  name: string;
+  description?: string | null;
+  items: Array<{
+    id?: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+};
+
 async function fetchTemplates(includeArchived: boolean): Promise<EstimateTemplateSummary[]> {
   const url = new URL(`${API_BASE_URL}/estimate-templates`);
   if (includeArchived) {
@@ -75,6 +86,114 @@ export function useApplyEstimateTemplate(estimateId: string) {
         queryClient.invalidateQueries({ queryKey: ["estimates", estimateId] }),
         queryClient.invalidateQueries({ queryKey: ["estimates"] }),
       ]);
+    },
+  });
+}
+
+async function invalidateAllTemplateQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  await queryClient.invalidateQueries({ queryKey: ["estimate-templates"] });
+  await queryClient.invalidateQueries({ queryKey: ["estimate-templates", "all"] });
+  await queryClient.invalidateQueries({ queryKey: ["estimate-templates", "active"] });
+}
+
+export function useCreateEstimateTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<EstimateTemplateSummary, Error, EstimateTemplatePayload>({
+    mutationFn: async (payload) => {
+      const response = await fetch(`${API_BASE_URL}/estimate-templates`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => null);
+        throw new Error(message || `Failed to create template (${response.status})`);
+      }
+
+      return response.json();
+    },
+    onSuccess: async () => {
+      await invalidateAllTemplateQueries(queryClient);
+    },
+  });
+}
+
+export function useUpdateEstimateTemplate(templateId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<EstimateTemplateSummary, Error, EstimateTemplatePayload>({
+    mutationFn: async (payload) => {
+      const response = await fetch(`${API_BASE_URL}/estimate-templates/${templateId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => null);
+        throw new Error(message || `Failed to update template (${response.status})`);
+      }
+
+      return response.json();
+    },
+    onSuccess: async () => {
+      await invalidateAllTemplateQueries(queryClient);
+    },
+  });
+}
+
+export function useArchiveEstimateTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<EstimateTemplateSummary, Error, { templateId: string }>({
+    mutationFn: async ({ templateId }) => {
+      const response = await fetch(`${API_BASE_URL}/estimate-templates/${templateId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => null);
+        throw new Error(message || `Failed to archive template (${response.status})`);
+      }
+
+      return response.json();
+    },
+    onSuccess: async () => {
+      await invalidateAllTemplateQueries(queryClient);
+    },
+  });
+}
+
+export function useRestoreEstimateTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<EstimateTemplateSummary, Error, { templateId: string }>({
+    mutationFn: async ({ templateId }) => {
+      const response = await fetch(`${API_BASE_URL}/estimate-templates/${templateId}/restore`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => null);
+        throw new Error(message || `Failed to restore template (${response.status})`);
+      }
+
+      return response.json();
+    },
+    onSuccess: async () => {
+      await invalidateAllTemplateQueries(queryClient);
     },
   });
 }

@@ -282,7 +282,7 @@ function EstimatesPageContent() {
             Track proposals, approvals, and conversion to jobs across your pipeline.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+        <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold">
             <ClipboardCheck className="h-4 w-4 text-primary" />
             {showScheduled ? estimates.length : visibleEstimates.length} estimates
@@ -296,6 +296,12 @@ function EstimatesPageContent() {
             />
             Include scheduled jobs
           </label>
+          <Link
+            href="/estimates/templates"
+            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+          >
+            Manage templates
+          </Link>
           <Link
             href="/estimates/new"
             className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"

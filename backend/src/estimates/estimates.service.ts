@@ -617,6 +617,14 @@ export class EstimatesService {
     return summary;
   }
 
+  async exportPdf(id: string): Promise<{ filename: string; buffer: Buffer }> {
+    const summary = await this.findOne(id);
+    const buffer = await this.generateEstimatePdf(summary);
+    const safeNumber = summary.number.replace(/[^\w.-]+/g, '_') || 'estimate';
+    const filename = `${safeNumber}.pdf`;
+    return { filename, buffer };
+  }
+
   private async generateEstimatePdf(summary: EstimateSummary): Promise<Buffer> {
     return new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });

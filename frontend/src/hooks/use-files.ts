@@ -22,6 +22,12 @@ export type UploadedFileSummary = {
   jobId?: string | null;
   estimateId?: string | null;
   invoiceId?: string | null;
+  previewUrl?: string | null;
+  thumbnailUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  aspectRatio?: number | null;
+  dominantColor?: string | null;
   uploadedBy?: {
     id: string;
     name?: string | null;

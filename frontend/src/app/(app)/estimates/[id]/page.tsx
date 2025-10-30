@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarClock, ClipboardList, Layers, Loader2, Timer } from "lucide-react";
+import { ArrowLeft, CalendarClock, ClipboardList, ExternalLink, FileDown, Layers, Loader2, Timer } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useEstimateTemplates, useApplyEstimateTemplate } from "@/hooks/use-estimate-templates";
 import { FilesSection } from "@/components/files/files-section";
@@ -225,6 +225,7 @@ const { toast } = useToast();
   const [approveForm, setApproveForm] = useState({ name: "", email: "", signature: "" });
   const [approveFormError, setApproveFormError] = useState<string | null>(null);
   const [templateSelection, setTemplateSelection] = useState("");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const {
     data: estimate,
@@ -438,6 +439,51 @@ const { toast } = useToast();
     );
   };
 
+  const handleDownloadPdf = async () => {
+    if (!estimate) {
+      return;
+    }
+
+    try {
+      setDownloadingPdf(true);
+      const response = await fetch(`${API_BASE_URL}/estimates/${estimateId}/export/pdf`, {
+        headers: {
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => null);
+        throw new Error(message || `Failed to download PDF (${response.status})`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const safeName = (estimate.number || `estimate-${estimateId}`).replace(/[^\w.-]+/g, "_");
+      anchor.href = url;
+      anchor.download = `${safeName}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      toast({
+        variant: "success",
+        title: "PDF downloaded",
+        description: "Check your downloads for the exported estimate.",
+      });
+    } catch (downloadError) {
+      toast({
+        variant: "destructive",
+        title: "Unable to download PDF",
+        description:
+          downloadError instanceof Error ? downloadError.message : "Unknown error occurred.",
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   const totals = useMemo(() => {
     if (!estimate) {
       return {
@@ -540,20 +586,52 @@ const { toast } = useToast();
 
   return (
     <div className="page-stack">
-      <header className="section-card stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6 shadow-md shadow-primary/10">
-        <div className="space-y-3">
-          <Link
-            href="/estimates"
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:text-primary"
-          >
-            <ArrowLeft className="h-3 w-3" aria-hidden="true" />
-            Back to estimates
-          </Link>
-          <h1 className="text-2xl font-semibold text-foreground md:text-3xl">Estimate {estimate.number}</h1>
-          <p className="text-sm text-muted-foreground">
-            Created {formatDate(estimate.createdAt)} &bull; Last updated {formatDate(estimate.updatedAt)}
-          </p>
+      <header className="section-card shadow-md shadow-primary/10">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <Link
+              href="/estimates"
+              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:text-primary"
+            >
+              <ArrowLeft className="h-3 w-3" aria-hidden="true" />
+              Back to estimates
+            </Link>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-semibold text-foreground md:text-3xl">Estimate {estimate.number}</h1>
+              <p className="text-sm text-muted-foreground">
+                Created {formatDate(estimate.createdAt)} &bull; Last updated {formatDate(estimate.updatedAt)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              disabled={downloadingPdf}
+            >
+              {downloadingPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <FileDown className="h-4 w-4" aria-hidden="true" />
+              )}
+              {downloadingPdf ? "Preparing PDF..." : "Download PDF"}
+            </button>
+            {latestPdfAttachment && (
+              <a
+                href={latestPdfAttachment.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-muted/30 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary sm:w-auto"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                View last upload
+              </a>
+            )}
+          </div>
         </div>
+
         <div className="chip-group">
           <span className="chip chip--primary">
             <ClipboardList className="h-3 w-3 text-primary" aria-hidden="true" />
@@ -591,13 +669,13 @@ const { toast } = useToast();
             </div>
             <Link
               href={`/leads/${estimate.lead.id}`}
-              className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary sm:w-auto"
             >
               View lead
             </Link>
           </header>
 
-          <div className="section-card section-card--muted text-xs text-muted-foreground">
+          <div className="section-card section-card--muted text-sm text-muted-foreground">
             <div className="stack-sm sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
               <h3 className="text-sm font-semibold text-foreground">Template</h3>
               <span className="chip chip--outline text-[0.65rem]">
@@ -612,11 +690,11 @@ const { toast } = useToast();
               <p className="text-xs">No templates available yet. Create one from the templates manager.</p>
             ) : (
               <>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <select
                     value={templateSelection}
                     onChange={(event) => setTemplateSelection(event.target.value)}
-                    className="min-w-[160px] rounded border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+                    className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-60 sm:w-auto"
                     disabled={isTemplateActionPending}
                   >
                     <option value="">Manual entry</option>
@@ -629,34 +707,34 @@ const { toast } = useToast();
                   <button
                     type="button"
                     onClick={handleApplyTemplate}
-                    className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60 sm:w-auto"
                     disabled={templateApplyDisabled}
                   >
-                    {applyTemplateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                    {applyTemplateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                     {applyTemplateLabel}
                   </button>
                   {estimate.template && (
                     <button
                       type="button"
                       onClick={handleRemoveTemplate}
-                      className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-accent hover:text-accent disabled:opacity-60"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-accent hover:text-accent disabled:opacity-60 sm:w-auto"
                       disabled={templateRemoveDisabled}
                     >
-                      {updateTemplateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                      {updateTemplateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                       {removeTemplateLabel}
                     </button>
                   )}
                 </div>
                 {selectedTemplateOption && (
-                  <div className="section-card section-card--muted border border-dashed border-border/60">
+                  <div className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-background/70 p-4 text-sm">
                     {selectedTemplateOption.description && (
-                      <p className="text-xs text-muted-foreground">{selectedTemplateOption.description}</p>
+                      <p className="text-sm text-muted-foreground/80">{selectedTemplateOption.description}</p>
                     )}
-                    <ul className="space-y-1 text-xs text-muted-foreground">
+                    <ul className="space-y-2 text-sm text-muted-foreground">
                       {selectedTemplateOption.items.map((item) => (
                         <li
                           key={item.id}
-                          className="flex items-center justify-between gap-2 rounded border border-border/60 bg-background px-2 py-1"
+                          className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2"
                         >
                           <span className="truncate">{item.description}</span>
                           <span className="text-muted-foreground/70">
@@ -665,8 +743,8 @@ const { toast } = useToast();
                         </li>
                       ))}
                     </ul>
-                    <p className="text-[11px] text-muted-foreground/60">
-                      Applying a template will overwrite the current line items with the template defaults.
+                    <p className="text-[0.75rem] text-muted-foreground/60">
+                      Applying a template overwrites the current line items with the template defaults.
                     </p>
                   </div>
                 )}
@@ -676,14 +754,17 @@ const { toast } = useToast();
 
           <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             {estimate.lineItems.map((item) => (
-              <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-background px-3 py-2">
+              <div
+                key={item.id}
+                className="flex flex-col gap-2 rounded-2xl bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div>
                   <p className="font-semibold text-foreground">{item.description}</p>
-                  <p className="text-xs text-muted-foreground/80">
+                  <p className="text-sm text-muted-foreground/80">
                     Qty {item.quantity} &bull; {formatCurrency(item.unitPrice)}
                   </p>
                 </div>
-                <p className="text-sm font-semibold text-foreground">{formatCurrency(item.total)}</p>
+                <p className="text-base font-semibold text-foreground sm:text-lg">{formatCurrency(item.total)}</p>
               </div>
             ))}
           </div>
@@ -705,7 +786,9 @@ const { toast } = useToast();
 
           <div className="section-card section-card--muted text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Notes</h3>
-            <p className="mt-1">{estimate.notes?.length ? estimate.notes : "No notes captured."}</p>
+            <p className="mt-1 leading-relaxed">
+              {estimate.notes?.length ? estimate.notes : "No notes captured."}
+            </p>
           </div>
 
           <FilesSection
@@ -749,14 +832,14 @@ const { toast } = useToast();
                 )}
               </div>
             ) : (
-              <p className="text-xs">
+              <p className="text-sm">
                 Email the estimate to the customer when you are ready to review or request approval.
               </p>
             )}
             {estimateFilesLoading ? (
-              <p className="mt-2 text-xs text-muted-foreground">Loading attachments...</p>
+              <p className="mt-2 text-sm text-muted-foreground">Loading attachments...</p>
             ) : latestPdfAttachment ? (
-              <div className="mt-3 space-y-1 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              <div className="mt-3 space-y-2 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-foreground">Latest PDF</span>
                   <span>{formatRelativeTimeFromNow(latestPdfAttachment.createdAt)}</span>
@@ -766,7 +849,7 @@ const { toast } = useToast();
                   target="_blank"
                   rel="noopener noreferrer"
                   download={latestPdfAttachment.fileName}
-                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border px-4 py-2 font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary sm:w-auto"
                 >
                   Download {latestPdfAttachment.fileName}
                 </a>
@@ -786,47 +869,47 @@ const { toast } = useToast();
                   message: sendForm.message.trim() ? sendForm.message.trim() : undefined,
                 });
               }}
-              className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-3 py-3"
+              className="space-y-4 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-4 py-4"
             >
-              <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Recipient email
                 <input
                   type="email"
                   value={sendForm.email}
                   onChange={(event) => setSendForm((prev) => ({ ...prev, email: event.target.value }))}
-                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                   required
                   disabled={sendEstimateMutation.isPending}
                 />
               </label>
-              <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Customer name
                 <input
                   type="text"
                   value={sendForm.name}
                   onChange={(event) => setSendForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                   disabled={sendEstimateMutation.isPending}
                 />
               </label>
-              <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Message
                 <textarea
                   value={sendForm.message}
                   onChange={(event) => setSendForm((prev) => ({ ...prev, message: event.target.value }))}
                   rows={3}
-                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                   placeholder="Optional note to include with the proposal"
                   disabled={sendEstimateMutation.isPending}
                 />
               </label>
-              {sendFormError && <p className="text-xs text-accent">{sendFormError}</p>}
+              {sendFormError && <p className="text-sm text-accent">{sendFormError}</p>}
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
                 disabled={sendDisabled}
               >
-                {sendEstimateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                {sendEstimateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 {sendButtonLabel}
               </button>
             </form>
@@ -835,11 +918,11 @@ const { toast } = useToast();
           <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Approval</h3>
             {estimate.status === "APPROVED" ? (
-              <div className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
+              <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
                 <p className="font-semibold text-foreground">
                   Approved{latestApprovalRecord?.approverName ? ` by ${latestApprovalRecord.approverName}` : ""}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground/80">
                   {latestApprovalRecord?.approvedAt
                     ? `Recorded on ${formatDate(latestApprovalRecord.approvedAt)}`
                     : `Recorded ${formatDate(latestApprovalRecord?.createdAt ?? estimate.updatedAt)}`}
@@ -860,47 +943,47 @@ const { toast } = useToast();
                     signature: approveForm.signature.trim() ? approveForm.signature.trim() : undefined,
                   });
                 }}
-                className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-3 py-3"
+                className="space-y-4 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-4 py-4"
               >
-                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Approver name
                   <input
                     type="text"
                     value={approveForm.name}
                     onChange={(event) => setApproveForm((prev) => ({ ...prev, name: event.target.value }))}
-                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                     required
                     disabled={approveEstimateMutation.isPending}
                   />
                 </label>
-                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Approver email
                   <input
                     type="email"
                     value={approveForm.email}
                     onChange={(event) => setApproveForm((prev) => ({ ...prev, email: event.target.value }))}
-                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                     disabled={approveEstimateMutation.isPending}
                   />
                 </label>
-                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide">
+                <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Signature / note
                   <textarea
                     value={approveForm.signature}
                     onChange={(event) => setApproveForm((prev) => ({ ...prev, signature: event.target.value }))}
                     rows={3}
-                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                     placeholder="Optional signature information"
                     disabled={approveEstimateMutation.isPending}
                   />
                 </label>
-                {approveFormError && <p className="text-xs text-accent">{approveFormError}</p>}
+                {approveFormError && <p className="text-sm text-accent">{approveFormError}</p>}
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
                   disabled={approveDisabled}
                 >
-                  {approveEstimateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                  {approveEstimateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                   {approveButtonLabel}
                 </button>
               </form>
@@ -912,15 +995,15 @@ const { toast } = useToast();
           <div className="section-card shadow-sm shadow-primary/5 text-sm text-muted-foreground">
             <h3 className="text-sm font-semibold text-foreground">Job conversion</h3>
             {estimate.job ? (
-              <div className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
+              <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 space-y-2">
                 <p className="font-semibold text-foreground">Job scheduled</p>
-                <p className="text-xs">
+                <p className="text-sm text-muted-foreground/80">
                   Status: {estimate.job.status.replace("_", " ").toLowerCase()}
                   {estimate.job.scheduledStart ? ` - ${formatDate(estimate.job.scheduledStart)}` : ""}
                 </p>
                 <Link
                   href="/work"
-                  className="mt-2 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
                 >
                   Go to work board
                 </Link>
@@ -948,33 +1031,33 @@ const { toast } = useToast();
                       scheduledEnd: jobForm.end ? new Date(jobForm.end).toISOString() : undefined,
                     });
                   }}
-                  className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-3 py-3"
+                  className="space-y-4 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-4 py-4"
                 >
-                  <label className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide">Start</span>
+                  <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Start
                     <input
                       type="datetime-local"
                       value={jobForm.start}
                       onChange={(event) => setJobForm((prev) => ({ ...prev, start: event.target.value }))}
-                      className="w-48 rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                     />
                   </label>
-                  <label className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide">End</span>
+                  <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    End
                     <input
                       type="datetime-local"
                       value={jobForm.end}
                       onChange={(event) => setJobForm((prev) => ({ ...prev, end: event.target.value }))}
-                      className="w-48 rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
                     />
                   </label>
-                  {jobFormError && <p className="text-xs text-accent">{jobFormError}</p>}
+                  {jobFormError && <p className="text-sm text-accent">{jobFormError}</p>}
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
                     disabled={!allowJobScheduling || scheduleJobMutation.isPending}
                   >
-                    {scheduleJobMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                    {scheduleJobMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                     Schedule job
                   </button>
                 </form>
@@ -989,12 +1072,12 @@ const { toast } = useToast();
 
 function SnapshotRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/20 px-3 py-2">
+    <div className="flex flex-col gap-2 rounded-2xl bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="inline-flex items-center gap-2">
         {icon}
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+        <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       </div>
-      <span className="text-sm text-foreground">{value}</span>
+      <span className="text-base text-foreground sm:text-sm">{value}</span>
     </div>
   );
 }
@@ -1060,19 +1143,19 @@ function ApprovalHistoryCard({ entries }: { entries: EstimateApprovalEntry[] }) 
       ) : (
         <ul className="space-y-2">
           {entries.map((entry) => (
-            <li key={entry.id} className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
+            <li key={entry.id} className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
               <p className="font-semibold text-foreground">{describeApprovalEntry(entry)}</p>
-              <p className="text-xs text-muted-foreground/80">
+              <p className="text-sm text-muted-foreground/80">
                 {formatRelativeTimeFromNow(entry.sentAt ?? entry.createdAt)}
               </p>
               {entry.emailSubject && (
-                <p className="text-xs text-muted-foreground/70">Subject: {entry.emailSubject}</p>
+                <p className="text-sm text-muted-foreground/70">Subject: {entry.emailSubject}</p>
               )}
               {entry.emailMessageId && (
                 <p className="font-mono text-[11px] text-muted-foreground/60">Message ID: {entry.emailMessageId}</p>
               )}
               {entry.message && (
-                <p className="mt-1 text-xs text-muted-foreground/70">{entry.message}</p>
+                <p className="mt-1 text-sm text-muted-foreground/70">{entry.message}</p>
               )}
             </li>
           ))}

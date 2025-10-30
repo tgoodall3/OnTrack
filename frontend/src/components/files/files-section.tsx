@@ -302,14 +302,27 @@ function renderFileTypeIcon(type: UploadedFileSummary["type"]) {
 
 function renderFilePreview(file: UploadedFileSummary) {
   const isImage = file.type === "IMAGE";
+  const previewSrc = isImage ? file.thumbnailUrl ?? file.previewUrl ?? file.url : null;
   const basePreview = isImage ? (
-    <img src={file.url} alt={file.fileName} className="h-full w-full object-cover" loading="lazy" />
+    <img
+      src={previewSrc ?? file.url}
+      alt={file.fileName}
+      className="h-full w-full object-cover"
+      loading="lazy"
+    />
   ) : (
     <div className="flex h-full w-full items-center justify-center bg-muted/30">{renderFileTypeIcon(file.type)}</div>
   );
 
   return (
-    <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-border/60 bg-muted/20">
+    <div
+      className="relative h-16 w-16 overflow-hidden rounded-xl border border-border/60 bg-muted/20"
+      style={
+        file.type === "IMAGE" && file.dominantColor
+          ? { backgroundColor: `${file.dominantColor}1a` }
+          : undefined
+      }
+    >
       {basePreview}
       {file.scanStatus === "PENDING" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/80 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -541,9 +554,16 @@ function ImagePreviewOverlay({ file, onClose }: { file: UploadedFileSummary; onC
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
         <div className="grid gap-4 md:grid-cols-[2fr,1fr] md:items-start">
-          <div className="flex items-center justify-center rounded-2xl border border-border/60 bg-muted/20 p-4">
+          <div
+            className="flex items-center justify-center rounded-2xl border border-border/60 bg-muted/20 p-4"
+            style={
+              file.type === "IMAGE" && file.dominantColor
+                ? { backgroundColor: `${file.dominantColor}22` }
+                : undefined
+            }
+          >
             <img
-              src={file.url}
+              src={file.previewUrl ?? file.url}
               alt={file.fileName}
               className="max-h-[70vh] w-full rounded-xl object-contain"
               loading="lazy"
@@ -559,6 +579,17 @@ function ImagePreviewOverlay({ file, onClose }: { file: UploadedFileSummary; onC
               <span>{formatFileSize(file.fileSize)}</span>
               <span>{formatRelativeTime(file.createdAt)}</span>
             </div>
+            {file.width && file.height ? (
+              <p className="text-xs text-muted-foreground/80">
+                Dimensions{" "}
+                <span className="font-semibold text-foreground">
+                  {file.width} × {file.height}
+                </span>
+                {file.aspectRatio !== null && file.aspectRatio !== undefined
+                  ? ` • ${file.aspectRatio.toFixed(2)}:1`
+                  : null}
+              </p>
+            ) : null}
             {file.uploadedBy?.name || file.uploadedBy?.email ? (
               <p className="text-xs text-muted-foreground/80">
                 Uploaded by{" "}

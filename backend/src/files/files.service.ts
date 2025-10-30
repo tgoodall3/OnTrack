@@ -51,6 +51,12 @@ export interface FileSummary {
   jobId?: string | null;
   estimateId?: string | null;
   invoiceId?: string | null;
+  previewUrl?: string | null;
+  thumbnailUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  aspectRatio?: number | null;
+  dominantColor?: string | null;
   uploadedBy?: {
     id: string;
     name?: string | null;
@@ -256,13 +262,26 @@ export class FilesService {
     }
 
     const metadata = this.toRecord(file.metadata);
-    const key = typeof metadata?.key === 'string' ? metadata.key : undefined;
+    const keysToDelete = [
+      ...this.extractVariantKeys(metadata),
+      typeof metadata?.key === 'string' ? metadata.key : undefined,
+    ].filter((value): value is string => Boolean(value));
 
-    if (key) {
-      await this.storage.deleteObject(key);
-    } else {
+    if (keysToDelete.length === 0) {
       this.logger.warn(
-        `File ${file.id} metadata missing key field; skipping object deletion.`,
+        `File ${file.id} metadata missing storage keys; skipping object deletion.`,
+      );
+    } else {
+      await Promise.all(
+        keysToDelete.map((objectKey) =>
+          this.storage.deleteObject(objectKey).catch((error) => {
+            this.logger.warn(
+              `Failed to delete object ${objectKey} for file ${file.id}: ${String(
+                (error as Error)?.message ?? error,
+              )}`,
+            );
+          }),
+        ),
       );
     }
 
@@ -433,6 +452,44 @@ export class FilesService {
       typeof metadata?.fileSize === 'number' ? metadata.fileSize : null;
     const mimeType =
       typeof metadata?.mimeType === 'string' ? metadata.mimeType : null;
+    const width = typeof metadata?.width === 'number' ? metadata.width : null;
+    const height =
+      typeof metadata?.height === 'number' ? metadata.height : null;
+    const aspectRatio =
+      typeof metadata?.aspectRatio === 'number' ? metadata.aspectRatio : null;
+    const dominantColor =
+      typeof metadata?.dominantColor === 'string'
+        ? metadata.dominantColor
+        : null;
+
+    const variants = this.toRecord(
+      metadata?.variants as Prisma.JsonValue | null | undefined,
+    );
+    const previewVariant = variants
+      ? this.toRecord(
+          variants.preview as Prisma.JsonValue | null | undefined,
+        )
+      : null;
+    const thumbnailVariant = variants
+      ? this.toRecord(
+          variants.thumbnail as Prisma.JsonValue | null | undefined,
+        )
+      : null;
+
+    const previewUrl =
+      (typeof previewVariant?.url === 'string'
+        ? previewVariant.url
+        : typeof previewVariant?.key === 'string'
+          ? this.storage.resolvePublicUrl(previewVariant.key)
+          : null) ?? null;
+
+    const thumbnailUrl =
+      (typeof thumbnailVariant?.url === 'string'
+        ? thumbnailVariant.url
+        : typeof thumbnailVariant?.key === 'string'
+          ? this.storage.resolvePublicUrl(thumbnailVariant.key)
+          : null) ?? null;
+
     const isProcessing =
       file.scanStatus === FileScanStatus.PENDING && !processedAt;
 
@@ -452,6 +509,12 @@ export class FilesService {
       jobId: file.jobId,
       estimateId: file.estimateId,
       invoiceId: file.invoiceId,
+      previewUrl,
+      thumbnailUrl,
+      width,
+      height,
+      aspectRatio,
+      dominantColor,
       uploadedBy: file.uploadedBy ?? null,
     };
   }
@@ -463,6 +526,29 @@ export class FilesService {
       return null;
     }
     return value as Record<string, unknown>;
+  }
+
+  private extractVariantKeys(
+    metadata: Record<string, unknown> | null,
+  ): string[] {
+    if (!metadata) {
+      return [];
+    }
+
+    const variants = this.toRecord(metadata.variants as Prisma.JsonValue);
+    if (!variants) {
+      return [];
+    }
+
+    return Object.values(variants)
+      .map((entry) => this.toRecord(entry as Prisma.JsonValue))
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+      .map((entry) =>
+        typeof entry.key === 'string' && entry.key.length > 0
+          ? entry.key
+          : null,
+      )
+      .filter((key): key is string => Boolean(key));
   }
 
   private async logJobActivity(
