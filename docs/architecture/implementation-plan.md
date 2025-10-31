@@ -1,6 +1,6 @@
 # Implementation Plan & Roadmap
 
-## Phase 0 — Discovery & Planning (Week 1)
+## Phase 0 - Discovery & Planning (Week 1)
 - Finalize MVP scope, personas, and acceptance criteria.
 - Produce PRD, UX flows, and success metrics (activation, feature adoption, NPS).
 - Complete threat model aligned with OWASP ASVS L1; document mitigations.
@@ -12,7 +12,7 @@
 - Initial Prisma schema + migration script ready for bootstrap.
 - Shared design tokens and component guidelines in Figma/design repo.
 
-## Phase 1 — Foundations (Weeks 2–3)
+## Phase 1 - Foundations (Weeks 2-3)
 - Initialize monorepo (pnpm + Turborepo) with Next.js and NestJS scaffolds.
 - Configure linting, formatting, testing harnesses (ESLint, Prettier, Jest/Vitest).
 - Implement CI/CD (GitHub Actions) covering lint, typecheck, unit tests, build, deploy previews.
@@ -26,7 +26,7 @@
 - CI pipelines green on every PR; preview deploys generated automatically.
 - Auth + tenancy guard all routes; audit trail recorded for critical actions.
 
-## Phase 2 — Core Domain (Weeks 4–6)
+## Phase 2 - Core Domain (Weeks 4-6)
 - Implement Contacts & Leads CRUD, pipeline stages, CSV import, public lead form.
   - Admins can upload CSV files (name, email, phone, source, notes, stage) for batch creation with error summaries.
   - Public share link `/public/{tenant}/lead` posts directly into the pipeline with throttled submissions.
@@ -36,7 +36,7 @@
   - Send + approval flows capture recipient metadata, generate + attach PDFs, log activity, and unlock job scheduling.
   - Delivery panel surfaces last send timestamp, subject, and SMTP message ID alongside the freshest PDF so teams have proof of delivery.
   - Template library delivers `estimate_templates` + `estimate_template_items`, CRUD/apply endpoints, and UI to load, reapply, or clear templates in both the creator and detail flows with activity logging.
-- Convert Estimates → Jobs; scheduling scaffolding; job status transitions.
+- Convert Estimates -> Jobs; scheduling scaffolding; job status transitions.
   - Estimate detail now enforces approval-first scheduling, adds resend/record guardrails, and surfaces inline scheduling errors.
   - Lead detail CTAs deep-link into the builder and freshly created estimates redirect to their detail view for conversion.
 - Implement Tasks & Checklists with templates and per-job instantiation.
@@ -49,24 +49,44 @@
   - Work board job cards now support inline uploads, previews, and removal for site photos and documents.
   - Estimate detail page exposes attachments so proposals carry supporting documents through approval.
   - Upload pipeline records scan/processing state and the UI blocks preview/download until antivirus checks succeed.
+  - `pnpm --filter @ontrack/api run files:backfill-previews` reprocesses existing image uploads to generate preview/thumbnail variants.
 
 **Exit Criteria**
 - Admin can advance a lead to an approved estimate and job creation.
 - File uploads scanned, resized, and associated with jobs.
 - Comprehensive tests covering lead-to-job flow and file handling.
 
-## Phase 3 — Field Operations (Weeks 7–8)
+## Phase 3 - Field Operations (Weeks 7-8)
 - Crew mobile views: My Day, job detail, checklist interactions, photo capture.
 - Time tracking with GPS, edit requests, approvals.
 - Materials & equipment logging with cost codes.
 - Offline mode: cache job/task data, queue mutations, conflict resolution UX.
 
 **Exit Criteria**
-- Crew can complete daily workflow offline-first (≤60s happy path).
+- Crew can complete daily workflow offline-first (<=60s happy path).
 - Time entries synced with GPS data and approval workflow.
 - Offline queue handles degraded connectivity without data loss.
 
-## Phase 4 — Billing & Payments (Week 9)
+### Phase 3 Sprint Breakdown
+- **Sprint 7 - Mobile Job Flow & Offline Cache**
+  - Stabilize responsive layouts for My Day, job detail, checklists, and file capture.
+  - Build client-side cache hydrator that syncs crew assignments, tasks, and recent uploads for offline use.
+  - Ship optimistic checklist/task updates with retry queue instrumentation and admin visibility.
+- **Sprint 8 - Time & Materials Tracking**
+  - Extend data model with time entries, geo samples, and material logs tied to jobs and tasks.
+  - Deliver crew-side clock-in/out, quick-add materials, and supervisor approval queues.
+  - Produce reporting hooks (summary endpoints + exports) that feed payroll and costing workflows.
+
+**Cross-Sprint Enhancements**
+- Background sync worker reconciles offline mutations and flags conflicts for review.
+- Activity log emits crew mobility, time tracking, and material changes for audit coverage.
+- QA pass across mobile breakpoints with accessibility spot checks and smoke automation.
+- **Frontend Follow-up**
+  - Build crew-side time sheet UI with status chips (in-progress/submitted/approved) and expose approve/reject flows to supervisors.
+  - Surface location breadcrumbs on job detail (map preview + accuracy) and guard against missing coordinates.
+  - Refresh dashboard utilization widgets to rely on `durationMinutes` and approval metadata to avoid double counting.
+
+## Phase 4 - Billing & Payments (Week 9)
 - Invoice generation from jobs/change orders, reminders, balance tracking.
 - Stripe integration (card + ACH), webhook handling, partial payments/refunds.
 - Client portal enabling estimate approval, invoice payment, job gallery.
@@ -76,7 +96,7 @@
 - Finance flows reconcile payments, balance, and activity logs.
 - Stripe webhooks resilient and idempotent.
 
-## Phase 5 — Scheduling & Communications (Week 10)
+## Phase 5 - Scheduling & Communications (Week 10)
 - Calendar UI with drag-and-drop scheduling, availability constraints, ICS export.
 - Notification service: email + in-app; SMS reminders via Twilio with opt-in.
 - Saved searches, filters, global search (Postgres full-text).
@@ -86,7 +106,7 @@
 - Notifications delivered with preference management and audit log entries.
 - Search returns tenant-scoped results with saved view persistence.
 
-## Phase 6 — Reporting & Admin (Week 11)
+## Phase 6 - Reporting & Admin (Week 11)
 - Reports: pipeline, revenue, job profitability, AR aging, CSV export.
 - Admin suite: user & role management, billing plans, tenant settings.
 
@@ -95,7 +115,7 @@
 - Role management UI enforces RBAC updates and audit logging.
 - Billing plan changes trigger usage tracking and Stripe customer updates.
 
-## Phase 7 — Hardening & Launch (Weeks 12–13)
+## Phase 7 - Hardening & Launch (Weeks 12-13)
 - Performance profiling, N+1 query audits, caching improvements.
 - Security review (headers, CSP, rate limiting), pen-test-lite remediation.
 - Backup + recovery drill, runbooks, on-call procedures.
@@ -115,7 +135,7 @@
 ## Developer Environment Setup
 1. Install core toolchain: Node 20, PNPM, Docker, Terraform (for infra), AWS CLI.
 2. Run `pnpm install` in repo root (once packages are generated).
-3. Copy `.env.example` → `.env` for frontend/backend with secrets for Postgres, Redis, Stripe, Twilio, Resend, S3.
+3. Copy `.env.example` -> `.env` for frontend/backend with secrets for Postgres, Redis, Stripe, Twilio, Resend, S3.
 4. Start supporting services via `docker compose up` (Postgres, Redis, MinIO/LocalStack).
 5. Execute `pnpm db:migrate && pnpm db:seed`.
 6. Launch dev servers: `pnpm dev:web`, `pnpm dev:api`, `pnpm dev:worker`.

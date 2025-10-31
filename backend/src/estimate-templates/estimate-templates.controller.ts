@@ -51,6 +51,12 @@ export class EstimateTemplatesController {
     return this.templatesService.archive(id);
   }
 
+  @Delete(':id/permanent')
+  async remove(@Param('id') id: string) {
+    await this.templatesService.remove(id);
+    return { deleted: true };
+  }
+
   @Post(':id/restore')
   async restore(@Param('id') id: string) {
     return this.templatesService.restore(id);

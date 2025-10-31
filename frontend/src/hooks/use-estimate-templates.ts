@@ -60,6 +60,31 @@ export function useEstimateTemplates(includeArchived = false) {
   });
 }
 
+async function fetchTemplate(templateId: string): Promise<EstimateTemplateSummary> {
+  const response = await fetch(`${API_BASE_URL}/estimate-templates/${templateId}`, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-ID": TENANT_HEADER,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => null);
+    throw new Error(message || `Failed to load template (${response.status})`);
+  }
+
+  return response.json();
+}
+
+export function useEstimateTemplate(templateId: string | null, enabled = true) {
+  return useQuery<EstimateTemplateSummary, Error>({
+    queryKey: ["estimate-templates", "detail", templateId],
+    queryFn: () => fetchTemplate(templateId as string),
+    enabled: enabled && Boolean(templateId),
+  });
+}
+
 export function useApplyEstimateTemplate(estimateId: string) {
   const queryClient = useQueryClient();
 
@@ -191,6 +216,29 @@ export function useRestoreEstimateTemplate() {
       }
 
       return response.json();
+    },
+    onSuccess: async () => {
+      await invalidateAllTemplateQueries(queryClient);
+    },
+  });
+}
+
+export function useDeleteEstimateTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { templateId: string }>({
+    mutationFn: async ({ templateId }) => {
+      const response = await fetch(`${API_BASE_URL}/estimate-templates/${templateId}/permanent`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": TENANT_HEADER,
+        },
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => null);
+        throw new Error(message || `Failed to delete template (${response.status})`);
+      }
     },
     onSuccess: async () => {
       await invalidateAllTemplateQueries(queryClient);

@@ -7,6 +7,7 @@ import {
 import { ListTimeEntriesDto } from './dto/list-time-entries.dto';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { ApproveTimeEntryDto, RejectTimeEntryDto } from './dto/review-time-entry.dto';
 
 @Controller('jobs/:jobId/time-entries')
 @UseGuards(TenantGuard)
@@ -36,5 +37,23 @@ export class TimeEntriesController {
     @Body() dto: ClockOutDto,
   ): Promise<TimeEntrySummary> {
     return this.timeEntriesService.clockOut(jobId, entryId, dto);
+  }
+
+  @Post(':entryId/approve')
+  async approve(
+    @Param('jobId') jobId: string,
+    @Param('entryId') entryId: string,
+    @Body() dto: ApproveTimeEntryDto,
+  ): Promise<TimeEntrySummary> {
+    return this.timeEntriesService.approve(jobId, entryId, dto);
+  }
+
+  @Post(':entryId/reject')
+  async reject(
+    @Param('jobId') jobId: string,
+    @Param('entryId') entryId: string,
+    @Body() dto: RejectTimeEntryDto,
+  ): Promise<TimeEntrySummary> {
+    return this.timeEntriesService.reject(jobId, entryId, dto);
   }
 }

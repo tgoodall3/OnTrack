@@ -130,7 +130,9 @@ export class FileProcessingService {
 
     variants.preview = {
       key: previewKey,
-      url: this.storage.resolvePublicUrl(previewKey),
+      ...(this.storage.signedUrlEnabled
+        ? {}
+        : { url: this.storage.resolvePublicUrl(previewKey) }),
       width: previewInfo.width ?? null,
       height: previewInfo.height ?? null,
       mimeType: 'image/jpeg',
@@ -139,7 +141,9 @@ export class FileProcessingService {
 
     variants.thumbnail = {
       key: thumbnailKey,
-      url: this.storage.resolvePublicUrl(thumbnailKey),
+      ...(this.storage.signedUrlEnabled
+        ? {}
+        : { url: this.storage.resolvePublicUrl(thumbnailKey) }),
       width: thumbnailInfo.width ?? null,
       height: thumbnailInfo.height ?? null,
       mimeType: 'image/jpeg',

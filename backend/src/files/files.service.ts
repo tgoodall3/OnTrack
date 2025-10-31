@@ -222,7 +222,7 @@ export class FilesService {
       },
     });
 
-    return files.map((file) => this.toSummary(file));
+    return Promise.all(files.map((file) => this.toSummary(file)));
   }
 
   async listForEstimate(estimateId: string): Promise<FileSummary[]> {
@@ -242,7 +242,7 @@ export class FilesService {
       },
     });
 
-    return files.map((file) => this.toSummary(file));
+    return Promise.all(files.map((file) => this.toSummary(file)));
   }
 
   async remove(fileId: string): Promise<void> {
@@ -440,7 +440,7 @@ export class FilesService {
     return FileType.OTHER;
   }
 
-  private toSummary(file: FileWithRelations): FileSummary {
+  private async toSummary(file: FileWithRelations): Promise<FileSummary> {
     const metadata = this.toRecord(file.metadata);
     const processedAt =
       file.processedAt instanceof Date ? file.processedAt.toISOString() : null;
@@ -462,6 +462,12 @@ export class FilesService {
         ? metadata.dominantColor
         : null;
 
+    const originalKey =
+      typeof metadata?.key === 'string' ? metadata.key : null;
+    const storedUrl =
+      typeof metadata?.url === 'string' ? metadata.url : file.url;
+    const resolvedUrl = await this.resolveFileUrl(originalKey, storedUrl);
+
     const variants = this.toRecord(
       metadata?.variants as Prisma.JsonValue | null | undefined,
     );
@@ -476,26 +482,22 @@ export class FilesService {
         )
       : null;
 
-    const previewUrl =
-      (typeof previewVariant?.url === 'string'
-        ? previewVariant.url
-        : typeof previewVariant?.key === 'string'
-          ? this.storage.resolvePublicUrl(previewVariant.key)
-          : null) ?? null;
+    const previewUrl = await this.resolveFileUrl(
+      typeof previewVariant?.key === 'string' ? previewVariant.key : null,
+      typeof previewVariant?.url === 'string' ? previewVariant.url : null,
+    );
 
-    const thumbnailUrl =
-      (typeof thumbnailVariant?.url === 'string'
-        ? thumbnailVariant.url
-        : typeof thumbnailVariant?.key === 'string'
-          ? this.storage.resolvePublicUrl(thumbnailVariant.key)
-          : null) ?? null;
+    const thumbnailUrl = await this.resolveFileUrl(
+      typeof thumbnailVariant?.key === 'string' ? thumbnailVariant.key : null,
+      typeof thumbnailVariant?.url === 'string' ? thumbnailVariant.url : null,
+    );
 
     const isProcessing =
       file.scanStatus === FileScanStatus.PENDING && !processedAt;
 
     return {
       id: file.id,
-      url: file.url,
+      url: resolvedUrl ?? file.url,
       type: file.type,
       createdAt: file.createdAt.toISOString(),
       fileName:
@@ -517,6 +519,33 @@ export class FilesService {
       dominantColor,
       uploadedBy: file.uploadedBy ?? null,
     };
+  }
+
+  private async resolveFileUrl(
+    key: string | null,
+    existingUrl: string | null,
+  ): Promise<string | null> {
+    if (this.storage.signedUrlEnabled) {
+      if (!key) {
+        return existingUrl;
+      }
+      try {
+        return await this.storage.createPresignedDownload(key);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to create download URL for ${key}: ${String(
+            (error as Error)?.message ?? error,
+          )}`,
+        );
+        return existingUrl;
+      }
+    }
+
+    if (key) {
+      return this.storage.resolvePublicUrl(key);
+    }
+
+    return existingUrl;
   }
 
   private toRecord(

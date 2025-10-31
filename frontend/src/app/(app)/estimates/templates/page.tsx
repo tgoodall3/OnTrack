@@ -15,6 +15,7 @@ import {
   EstimateTemplateSummary,
   useArchiveEstimateTemplate,
   useCreateEstimateTemplate,
+  useDeleteEstimateTemplate,
   useEstimateTemplates,
   useRestoreEstimateTemplate,
   useUpdateEstimateTemplate,
@@ -118,6 +119,7 @@ export default function EstimateTemplatesPage(): JSX.Element {
   const createTemplate = useCreateEstimateTemplate();
   const archiveTemplate = useArchiveEstimateTemplate();
   const restoreTemplate = useRestoreEstimateTemplate();
+  const deleteTemplate = useDeleteEstimateTemplate();
 
   const [createDraft, setCreateDraft] = useState<TemplateDraft>({
     name: "",
@@ -284,6 +286,34 @@ const addItem = (
       toast({
         variant: "destructive",
         title: "Failed to restore template",
+        description:
+          mutationError instanceof Error ? mutationError.message : "Unknown error occurred.",
+      });
+    }
+  };
+
+  const removeTemplateForever = async (template: EstimateTemplateSummary) => {
+    const confirmed = window.confirm(
+      `Permanently delete "${template.name}"? This cannot be undone.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteTemplate.mutateAsync({ templateId: template.id });
+      toast({
+        variant: "success",
+        title: "Template deleted",
+        description: `"${template.name}" has been removed.`,
+      });
+      if (editingTemplateId === template.id) {
+        cancelEdit();
+      }
+    } catch (mutationError) {
+      toast({
+        variant: "destructive",
+        title: "Failed to delete template",
         description:
           mutationError instanceof Error ? mutationError.message : "Unknown error occurred.",
       });
@@ -628,19 +658,34 @@ const addItem = (
                         {template.items.length} line item{template.items.length === 1 ? "" : "s"}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => restore(template.id)}
-                      className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
-                      disabled={restoreTemplate.isPending && restoreTemplate.variables?.templateId === template.id}
-                    >
-                      {restoreTemplate.isPending && restoreTemplate.variables?.templateId === template.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                      )}
-                      Restore
-                    </button>
+                    <div className="stack-sm sm:flex-row sm:items-center sm:gap-2">
+                      <button
+                        type="button"
+                        onClick={() => restore(template.id)}
+                        className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+                        disabled={restoreTemplate.isPending && restoreTemplate.variables?.templateId === template.id}
+                      >
+                        {restoreTemplate.isPending && restoreTemplate.variables?.templateId === template.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                        )}
+                        Restore
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeTemplateForever(template)}
+                        className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-accent hover:text-accent"
+                        disabled={deleteTemplate.isPending && deleteTemplate.variables?.templateId === template.id}
+                      >
+                        {deleteTemplate.isPending && deleteTemplate.variables?.templateId === template.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Trash2 className="h-3 w-3" aria-hidden="true" />
+                        )}
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}

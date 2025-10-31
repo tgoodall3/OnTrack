@@ -22,8 +22,10 @@ export class StorageService {
   private readonly bucket: string;
   private readonly region: string;
   private readonly publicUrl?: string;
+  private readonly useSignedUrls: boolean;
   private readonly maxUploadBytes: number;
   private readonly uploadExpiresInSeconds: number;
+  private readonly downloadExpiresInSeconds: number;
   private readonly s3Client: S3Client;
 
   constructor(
@@ -33,8 +35,10 @@ export class StorageService {
     this.bucket = storageConfig.bucket;
     this.region = storageConfig.region;
     this.publicUrl = storageConfig.publicUrl ?? undefined;
+    this.useSignedUrls = storageConfig.useSignedUrls;
     this.maxUploadBytes = storageConfig.maxUploadBytes;
     this.uploadExpiresInSeconds = storageConfig.uploadExpiresInSeconds;
+    this.downloadExpiresInSeconds = storageConfig.downloadExpiresInSeconds;
 
     const endpoint = storageConfig.endpoint?.trim();
     this.s3Client = new S3Client({
@@ -55,6 +59,14 @@ export class StorageService {
 
   get uploadExpirySeconds(): number {
     return this.uploadExpiresInSeconds;
+  }
+
+  get signedUrlEnabled(): boolean {
+    return this.useSignedUrls;
+  }
+
+  get downloadExpirySeconds(): number {
+    return this.downloadExpiresInSeconds;
   }
 
   async createPresignedUpload(
@@ -80,6 +92,20 @@ export class StorageService {
         'Content-Type': contentType,
       },
     };
+  }
+
+  async createPresignedDownload(
+    key: string,
+    expiresIn = this.downloadExpiresInSeconds,
+  ): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    return getSignedUrl(this.s3Client, command, {
+      expiresIn,
+    });
   }
 
   async uploadObject(

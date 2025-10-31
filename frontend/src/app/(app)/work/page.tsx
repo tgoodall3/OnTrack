@@ -1,7 +1,19 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MapPin, Timer, Plus, CheckCircle2, Circle, ClipboardCheck, History } from "lucide-react";
+import {
+  Loader2,
+  MapPin,
+  Timer,
+  Plus,
+  CheckCircle2,
+  Circle,
+  ClipboardCheck,
+  History,
+  Pencil,
+  Save,
+  X,
+} from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
@@ -10,6 +22,7 @@ import { ChecklistTemplate, useChecklistTemplates } from "@/hooks/use-checklist-
 import { JobActivityEntry, useJobActivity } from "@/hooks/use-job-activity";
 import { FilesSection } from "@/components/files/files-section";
 import { JobStatus, JobSummary, TaskSummary } from "@/lib/types/jobs";
+import { useJobFiles } from "@/hooks/use-files";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_ID ?? "demo-contractors";
@@ -24,9 +37,12 @@ type CreateTaskInput = {
 type UpdateTaskInput = {
   jobId: string;
   taskId: string;
-  updates: Partial<Pick<TaskSummary, "title" | "status">> & {
+  updates: {
+    title?: string;
+    status?: TaskSummary["status"];
     assigneeId?: string | null;
     dueAt?: string | null;
+    checklistTemplateId?: string | null;
   };
 };
 
@@ -352,6 +368,10 @@ function WorkPageContent() {
               ? teamMembers.find((member) => member.id === input.updates.assigneeId)
               : undefined,
           );
+        }
+
+        if (input.updates.checklistTemplateId !== undefined) {
+          next.checklistTemplateId = input.updates.checklistTemplateId ?? null;
         }
 
         return next;
@@ -695,12 +715,12 @@ function WorkPageContent() {
               return (
                 <article
                   key={job.id}
-                  className="rounded-3xl border border-border bg-surface p-6 shadow-md shadow-primary/10 transition hover:border-primary/60"
+                  className="space-y-5 rounded-3xl border border-border bg-surface p-5 shadow-md shadow-primary/10 transition hover:border-primary/60 sm:p-6"
                 >
-                  <div className="stack-sm sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-lg font-semibold text-foreground">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                        <p className="text-lg font-semibold text-foreground sm:text-xl">
                           {job.lead?.contactName ?? "Field assignment"}
                         </p>
                         {appliedTemplateMeta && (
@@ -743,13 +763,15 @@ function WorkPageContent() {
                         </div>
                       )}
                     </div>
-                    <JobStatusSelect
-                      value={job.status}
-                      disabled={statusUpdatingId === job.id && updateJobStatusMutation.isPending}
-                      onChange={(nextStatus) => handleJobStatusChange(job, nextStatus)}
-                    />
+                    <div className="w-full max-w-xs sm:max-w-sm lg:w-auto lg:self-start">
+                      <JobStatusSelect
+                        value={job.status}
+                        disabled={statusUpdatingId === job.id && updateJobStatusMutation.isPending}
+                        onChange={(nextStatus) => handleJobStatusChange(job, nextStatus)}
+                      />
+                    </div>
                   </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-3">
                   <StatusCard
                     label="Scheduled"
                     value={formatDateRange(job.scheduledStart, job.scheduledEnd) ?? "Pending"}
@@ -760,6 +782,7 @@ function WorkPageContent() {
                 {job.notes && (
                   <p className="mt-4 rounded-2xl bg-muted/40 px-4 py-3 text-sm text-muted-foreground">{job.notes}</p>
                 )}
+                <JobFileStrip jobId={job.id} />
                 <JobTasksSection
                   jobId={job.id}
                   templates={checklistTemplates}
@@ -777,6 +800,7 @@ function WorkPageContent() {
                     createTaskMutation.mutate(payload);
                   }}
                   onUpdateTask={(payload) => updateTaskMutation.mutate(payload)}
+                  onRenameTask={(payload) => updateTaskMutation.mutateAsync(payload)}
                   onDeleteTask={(payload) => deleteTaskMutation.mutate(payload)}
                   creating={creatingForJob === job.id && createTaskMutation.isPending}
                   openCreateTask={() => {
@@ -800,6 +824,8 @@ function WorkPageContent() {
                   newTaskDueDate={newTaskDueDate}
                   onNewTaskDueDateChange={setNewTaskDueDate}
                   taskError={taskError}
+                  taskUpdatePending={updateTaskMutation.isPending}
+                  taskUpdatePendingId={updateTaskMutation.variables?.taskId ?? null}
                 />
                 <FilesSection
                   scope={{ jobId: job.id }}
@@ -821,9 +847,9 @@ function WorkPageContent() {
 
 function StatusCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+    <div className="rounded-2xl bg-muted/40 px-4 py-3 text-sm text-muted-foreground sm:px-5 sm:py-4">
       <span className="font-semibold text-foreground">{label}</span>
-      <div>{value}</div>
+      <div className="mt-1 text-base text-foreground/80 sm:text-sm">{value}</div>
     </div>
   );
 }
@@ -832,7 +858,7 @@ function formatDateRange(start?: string | null, end?: string | null) {
   if (!start && !end) return undefined;
   const startText = start ? formatDate(start) : "TBD";
   const endText = end ? formatDate(end) : "TBD";
-  return `${startText} → ${endText}`;
+  return `${startText} - ${endText}`;
 }
 
 function formatDate(iso: string) {
@@ -854,13 +880,13 @@ function JobStatusSelect({
   onChange: (status: JobStatus) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
-      <div className="relative">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
+      <div className="relative w-full sm:w-auto">
         <select
           value={value}
           onChange={(event) => onChange(event.target.value as JobStatus)}
-          className="appearance-none rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none pr-8"
+          className="w-full appearance-none rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none pr-10"
           disabled={disabled}
         >
           {JOB_STATUS_OPTIONS.map(({ value: optionValue, label }) => (
@@ -870,7 +896,7 @@ function JobStatusSelect({
           ))}
         </select>
         {disabled && (
-          <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 animate-spin text-primary" aria-hidden="true" />
+          <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" aria-hidden="true" />
         )}
       </div>
     </div>
@@ -950,6 +976,7 @@ function JobTasksSection(props: {
   onTemplateDetected: (jobId: string, template: ChecklistTemplate | null) => void;
   onCreateTask: (input: CreateTaskInput) => void;
   onUpdateTask: (input: UpdateTaskInput) => void;
+  onRenameTask: (input: UpdateTaskInput) => Promise<TaskSummary>;
   onDeleteTask: (input: { jobId: string; taskId: string }) => void;
   creating: boolean;
   openCreateTask: () => void;
@@ -962,6 +989,8 @@ function JobTasksSection(props: {
   newTaskDueDate: string;
   onNewTaskDueDateChange: (value: string) => void;
   taskError: string | null;
+  taskUpdatePending: boolean;
+  taskUpdatePendingId: string | null;
 }) {
   const { toast: taskToast } = useToast();
 
@@ -979,6 +1008,7 @@ function JobTasksSection(props: {
     onTemplateDetected,
     onCreateTask,
     onUpdateTask,
+    onRenameTask,
     onDeleteTask,
     creating,
     openCreateTask,
@@ -991,6 +1021,8 @@ function JobTasksSection(props: {
     newTaskDueDate,
     onNewTaskDueDateChange,
     taskError,
+    taskUpdatePending,
+  taskUpdatePendingId,
   } = props;
 
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -1066,13 +1098,51 @@ function JobTasksSection(props: {
     });
   };
 
+  const handleRenameTask = useCallback(
+    async (task: TaskSummary, nextTitle: string): Promise<boolean> => {
+      const trimmed = nextTitle.trim();
+      if (!trimmed) {
+        taskToast({
+          variant: "destructive",
+          title: "Task title required",
+          description: "Enter a task name before saving.",
+        });
+        return false;
+      }
+
+      if (trimmed === task.title) {
+        return true;
+      }
+
+      const updates: UpdateTaskInput["updates"] = {
+        title: trimmed,
+      };
+
+      if (task.checklistTemplateId) {
+        updates.checklistTemplateId = null;
+      }
+
+      try {
+        await onRenameTask({
+          jobId,
+          taskId: task.id,
+          updates,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [jobId, onRenameTask, taskToast],
+  );
+
   return (
-    <div className="mt-6 rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide">
+    <div className="mt-6 rounded-2xl border border-border/70 bg-muted/30 p-5 text-sm text-muted-foreground">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-sm font-semibold uppercase tracking-wide">
         <span>Tasks</span>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           {appliedTemplate && (
-            <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="inline-flex items-center gap-3 rounded-full border border-border px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               <ClipboardCheck className="h-3 w-3 text-primary" aria-hidden="true" />
               <span>{appliedTemplate.name}</span>
               <button
@@ -1090,7 +1160,7 @@ function JobTasksSection(props: {
                   }
                 }}
                 disabled={applyingTemplateJobId === jobId}
-                className="rounded-full border border-transparent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent transition hover:text-accent/80 disabled:opacity-60"
+                className="rounded-full border border-transparent px-3 py-1 text-sm font-semibold uppercase tracking-wide text-accent transition hover:text-accent/80 disabled:opacity-60"
               >
                 Remove
               </button>
@@ -1102,11 +1172,11 @@ function JobTasksSection(props: {
           {templatesLoading ? (
             <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />
           ) : templates.length > 0 ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <select
                 value={selectedTemplateId}
                 onChange={(event) => setSelectedTemplateId(event.target.value)}
-                className="min-w-[150px] rounded-full border border-border bg-background px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
+                className="min-w-[170px] rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
               >
                 <option value="">Apply template...</option>
                 {templates.map((template) => (
@@ -1160,7 +1230,7 @@ function JobTasksSection(props: {
                   templatesLoading ||
                   (!!appliedTemplateId && selectedTemplateId === appliedTemplateId)
                 }
-                className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
               >
                 {applyingTemplateJobId === jobId ? (
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -1180,7 +1250,7 @@ function JobTasksSection(props: {
                 void refetchJobActivity();
               }
             }}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
+            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
           >
             <History className="h-3 w-3" aria-hidden="true" />
             {showActivityFeed ? "Hide activity" : "View activity"}
@@ -1188,7 +1258,7 @@ function JobTasksSection(props: {
           <button
             type="button"
             onClick={openCreateTask}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
+            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
           >
             <Plus className="h-3 w-3" />
             Add task
@@ -1205,19 +1275,19 @@ function JobTasksSection(props: {
       {error && <div className="text-xs text-accent">{error.message}</div>}
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           Loading tasks...
         </div>
       ) : taskList.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border/60 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           No tasks scheduled yet. Add the first checklist item for this job.
         </div>
       ) : (
         <div className="space-y-3">
           {pendingTasks.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">In progress</p>
+              <p className="text-sm font-semibold uppercase text-muted-foreground">In progress</p>
               <div className="space-y-2">
                 {pendingTasks.map((task) => (
                   <TaskRow
@@ -1229,6 +1299,8 @@ function JobTasksSection(props: {
                     onAssignChange={(assigneeId) => handleAssigneeChange(task, assigneeId)}
                     onDueDateChange={(dueAt) => handleDueDateChange(task, dueAt)}
                     onDelete={() => onDeleteTask({ jobId, taskId: task.id })}
+                    onRename={(title) => handleRenameTask(task, title)}
+                    isUpdating={taskUpdatePending && taskUpdatePendingId === task.id}
                   />
                 ))}
               </div>
@@ -1249,6 +1321,8 @@ function JobTasksSection(props: {
                     onAssignChange={(assigneeId) => handleAssigneeChange(task, assigneeId)}
                     onDueDateChange={(dueAt) => handleDueDateChange(task, dueAt)}
                     onDelete={() => onDeleteTask({ jobId, taskId: task.id })}
+                    onRename={(title) => handleRenameTask(task, title)}
+                    isUpdating={taskUpdatePending && taskUpdatePendingId === task.id}
                   />
                 ))}
               </div>
@@ -1286,52 +1360,101 @@ function JobTasksSection(props: {
           <input
             value={newTaskTitle}
             onChange={(event) => onNewTaskTitleChange(event.target.value)}
-            placeholder="Task title"
-            className="flex-1 min-w-[140px] rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
-            autoFocus
-          />
-          <select
-            value={newTaskAssigneeId}
-            onChange={(event) => onNewTaskAssigneeChange(event.target.value)}
-            className="min-w-[140px] rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
-            disabled={teamMembersLoading}
-          >
-            <option value="">Unassigned</option>
-            {teamMembers.map((member) => (
-              <option key={member.id} value={member.id}>
+        placeholder="Task description"
+        className="flex-1 min-w-[160px] rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+        autoFocus
+      />
+      <select
+        value={newTaskAssigneeId}
+        onChange={(event) => onNewTaskAssigneeChange(event.target.value)}
+        className="min-w-[160px] rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+        disabled={teamMembersLoading}
+      >
+        <option value="">Unassigned</option>
+        {teamMembers.map((member) => (
+          <option key={member.id} value={member.id}>
                 {formatTeamMemberLabel(member)}
               </option>
             ))}
           </select>
-          <input
-            type="date"
-            value={newTaskDueDate}
-            onChange={(event) => onNewTaskDueDateChange(event.target.value)}
-            className="rounded border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
-            disabled={creating}
+      <input
+        type="date"
+        value={newTaskDueDate}
+        onChange={(event) => onNewTaskDueDateChange(event.target.value)}
+        className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+      />
+      <button
+        type="submit"
+        className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+        disabled={creating}
+      >
+        {creating && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+        Save
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onNewTaskTitleChange("");
+          onNewTaskAssigneeChange("");
+          onNewTaskDueDateChange("");
+          closeCreateTask();
+        }}
+        className="rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
+      >
+        Cancel
+      </button>
+      {taskError && <span className="text-sm text-accent">{taskError}</span>}
+    </form>
+  )}
+</div>
+  );
+}
+
+function JobFileStrip({ jobId }: { jobId: string }) {
+  const { data, isLoading, error } = useJobFiles(jobId);
+  const imageFiles = useMemo(
+    () => (data ?? []).filter((file) => file.type === "IMAGE"),
+    [data],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        Loading photos...
+      </div>
+    );
+  }
+
+  if (error || imageFiles.length === 0) {
+    return null;
+  }
+
+  const previews = imageFiles.slice(0, 3);
+  const remaining = imageFiles.length - previews.length;
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      {previews.map((file, index) => {
+        const src = file.thumbnailUrl ?? file.previewUrl ?? file.url;
+        const showOverlay = index === previews.length - 1 && remaining > 0;
+        return (
+          <a
+            key={file.id}
+            href={file.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="relative h-16 w-16 overflow-hidden rounded-xl border border-border/60 bg-muted/30"
           >
-            {creating && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onNewTaskTitleChange("");
-              onNewTaskAssigneeChange("");
-              onNewTaskDueDateChange("");
-              closeCreateTask();
-            }}
-            className="rounded-full border border-border px-3 py-1 font-semibold text-muted-foreground transition hover:border-primary hover:text-primary"
-          >
-            Cancel
-          </button>
-          {taskError && <span className="text-xs text-accent">{taskError}</span>}
-        </form>
-      )}
+            <img src={src} alt={file.fileName} className="h-full w-full object-cover" loading="lazy" />
+            {showOverlay && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/85 text-sm font-semibold text-muted-foreground">
+                +{remaining}
+              </div>
+            )}
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -1344,6 +1467,8 @@ function TaskRow({
   onAssignChange,
   onDueDateChange,
   onDelete,
+  onRename,
+  isUpdating,
 }: {
   task: TaskSummary;
   teamMembers: TeamMember[];
@@ -1352,39 +1477,76 @@ function TaskRow({
   onAssignChange: (assigneeId?: string) => void;
   onDueDateChange: (dueAt: string | null) => void;
   onDelete: () => void;
+  onRename: (title: string) => Promise<boolean>;
+  isUpdating: boolean;
 }) {
   const isComplete = task.status === "COMPLETE";
   const assigneeLabel = task.assignee?.name ?? task.assignee?.email ?? "Unassigned";
   const dueInputValue = toDateInputValue(task.dueAt);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(task.title);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraftTitle(task.title);
+    }
+  }, [isEditing, task.title]);
+
+  const handleSave = async () => {
+    if (saving || isUpdating) return;
+    setSaving(true);
+    const success = await onRename(draftTitle);
+    setSaving(false);
+    if (success) {
+      setIsEditing(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setDraftTitle(task.title);
+    setIsEditing(false);
+  };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface px-3 py-2 text-xs text-muted-foreground">
-      <div className="flex min-w-[180px] flex-1 items-center gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-surface px-4 py-3 text-sm text-muted-foreground">
+      <div className="flex min-w-[200px] flex-1 items-center gap-3">
         <button
           type="button"
           onClick={onToggleStatus}
-          className="rounded-full border border-border p-1 text-muted-foreground transition hover:border-primary hover:text-primary"
+          className="rounded-full border border-border p-2 text-muted-foreground transition hover:border-primary hover:text-primary"
         >
-          {isComplete ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Circle className="h-4 w-4" />}
+          {isComplete ? <CheckCircle2 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5" />}
         </button>
         <div>
-          <p className={`font-medium ${isComplete ? "text-muted-foreground line-through" : "text-foreground"}`}>
-            {task.title}
-          </p>
-          <p className="text-[10px] uppercase text-muted-foreground">
+          {isEditing ? (
+            <input
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground focus:border-primary focus:outline-none"
+              autoFocus
+              aria-label="Task title"
+            />
+          ) : (
+            <p className={`font-medium ${isComplete ? "text-muted-foreground line-through" : "text-foreground"}`}>
+              {task.title}
+            </p>
+          )}
+          <p className="text-xs uppercase text-muted-foreground">
             {assigneeLabel}
             {task.dueAt ? ` - due ${formatDate(task.dueAt)}` : ""}
+            {task.checklistTemplateId && !isEditing ? " - Template" : ""}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <select
           value={task.assignee?.id ?? ""}
           onChange={(event) => {
             const value = event.target.value;
             onAssignChange(value ? value : undefined);
           }}
-          className="min-w-[140px] rounded border border-border bg-background px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
+          className="min-w-[160px] rounded-lg border border-border bg-background px-3 py-2 text-sm uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
           disabled={teamMembersLoading}
         >
           <option value="">Unassigned</option>
@@ -1401,15 +1563,49 @@ function TaskRow({
             const value = event.target.value;
             onDueDateChange(value ? toIsoDateFromInput(value) : null);
           }}
-          className="rounded border border-border bg-background px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm uppercase tracking-wide text-muted-foreground focus:border-primary focus:outline-none"
         />
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded-full border border-border px-2 py-1 text-muted-foreground transition hover:border-accent hover:text-accent"
-        >
-          Remove
-        </button>
+        <div className="flex items-center gap-1">
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="inline-flex items-center gap-2 rounded-full border border-primary px-3 py-2 text-sm font-semibold uppercase tracking-wide text-primary transition hover:bg-primary/10 disabled:opacity-60"
+                disabled={saving || isUpdating}
+              >
+                {(saving || isUpdating) && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                <Save className="h-3 w-3" aria-hidden="true" />
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-60"
+              disabled={isUpdating}
+            >
+              <Pencil className="h-3 w-3" aria-hidden="true" />
+              Edit
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-full border border-border px-3 py-2 text-sm text-muted-foreground transition hover:border-accent hover:text-accent"
+          >
+            Remove
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1434,24 +1630,24 @@ function JobActivityStream({
   error: string | null;
 }) {
   return (
-    <div className="mt-4 space-y-2 rounded-2xl border border-border/60 bg-background/40 p-3 text-xs text-muted-foreground">
+    <div className="mt-4 space-y-3 rounded-2xl border border-border/60 bg-background/40 p-4 text-sm text-muted-foreground">
       <div className="stack-sm sm:justify-between">
         <span className="font-semibold uppercase tracking-wide text-muted-foreground/80">Recent activity</span>
-        {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />}
       </div>
       {error ? (
-        <div className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-[11px] text-accent-foreground">
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
           {error}
         </div>
       ) : entries.length === 0 ? (
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70">No activity yet.</p>
+        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">No activity yet.</p>
       ) : (
         <ul className="space-y-2">
           {entries.map((entry) => (
             <li key={entry.id} className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2">
               <p className="font-semibold text-foreground">{describeJobActivity(entry)}</p>
-              <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">
-                {formatActor(entry)} • {formatRelativeTimeFromNow(entry.createdAt)}
+              <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground/80">
+                {formatActor(entry)} - {formatRelativeTimeFromNow(entry.createdAt)}
               </p>
             </li>
           ))}

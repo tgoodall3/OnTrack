@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ListTasksDto } from './dto/list-tasks.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { RequestContextService } from '../context/request-context.service';
 
 type TaskWithRelations = Prisma.TaskGetPayload<{
   include: {
@@ -35,7 +36,10 @@ export interface TaskSummary {
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   async list(jobId: string, params: ListTasksDto): Promise<TaskSummary[]> {
     const tenantId = this.prisma.getTenantIdOrThrow();
@@ -111,6 +115,19 @@ export class TasksService {
     const tenantId = this.prisma.getTenantIdOrThrow();
     await this.ensureJobAccess(jobId, tenantId);
 
+    const existing = await this.prisma.task.findFirst({
+      where: { id: taskId, jobId, tenantId },
+      select: {
+        id: true,
+        title: true,
+        checklistTemplateId: true,
+      },
+    });
+
+    if (!existing) {
+      throw new BadRequestException('Task not found');
+    }
+
     const data: Prisma.TaskUpdateInput = {};
 
     if (dto.title !== undefined) data.title = dto.title;
@@ -153,6 +170,31 @@ export class TasksService {
         },
       },
     });
+
+    const templateDetached =
+      !!existing.checklistTemplateId && !task.checklistTemplateId;
+    const titleChanged = existing.title !== task.title;
+
+    if (templateDetached) {
+      await this.logJobActivity(
+        tenantId,
+        jobId,
+        'job.checklist_task_detached',
+        {
+          taskId,
+          previousTemplateId: existing.checklistTemplateId,
+          title: task.title,
+        },
+      );
+    }
+
+    if (titleChanged) {
+      await this.logJobActivity(tenantId, jobId, 'job.task_renamed', {
+        taskId,
+        previousTitle: existing.title,
+        title: task.title,
+      });
+    }
 
     return this.toSummary(task);
   }
@@ -205,5 +247,24 @@ export class TasksService {
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
     };
+  }
+
+  private async logJobActivity(
+    tenantId: string,
+    jobId: string,
+    action: string,
+    meta?: Record<string, unknown>,
+  ): Promise<void> {
+    const actorId = this.requestContext.context?.userId ?? null;
+    await this.prisma.activityLog.create({
+      data: {
+        tenantId,
+        entityType: 'job',
+        entityId: jobId,
+        action,
+        meta: meta ? (meta as Prisma.JsonValue) : undefined,
+        actorId,
+      },
+    });
   }
 }

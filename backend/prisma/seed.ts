@@ -8,6 +8,7 @@ import {
   RoleKey,
   TaskStatus,
   TenantPlan,
+  TimeEntryStatus,
 } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -32,6 +33,9 @@ const CREW_MEMBERS = [
   },
 ];
 
+const DEMO_CLOCK_IN_LOCATION = { lat: 45.523064, lng: -122.676483, accuracy: 12 };
+const DEMO_CLOCK_OUT_LOCATION = { lat: 45.528561, lng: -122.68107, accuracy: 10 };
+
 function hoursFromNow(hours: number): Date {
   const date = new Date();
   date.setHours(date.getHours() + hours);
@@ -48,6 +52,10 @@ function withTime(base: Date, hours: number, minutes = 0): Date {
   const date = new Date(base);
   date.setHours(hours, minutes, 0, 0);
   return date;
+}
+
+function minutesBetween(start: Date, end: Date): number {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
 }
 
 async function ensureRoles(tenantId: string) {
@@ -521,54 +529,127 @@ async function seedTenant() {
     },
   });
 
+  const alexCrewMember = crewMembers[0] ?? owner;
+  const jordanCrewMember = crewMembers[1] ?? owner;
+
+  const alexMondayClockIn = withTime(daysAgo(2), 7, 30);
+  const alexMondayClockOut = withTime(daysAgo(2), 15, 30);
+  const alexMondayMinutes = minutesBetween(alexMondayClockIn, alexMondayClockOut);
+
   await prisma.timeEntry.upsert({
     where: { id: 'time_demo_alex_monday' },
     update: {
-      clockIn: withTime(daysAgo(2), 7, 30),
-      clockOut: withTime(daysAgo(2), 15, 30),
+      clockIn: alexMondayClockIn,
+      clockOut: alexMondayClockOut,
+      durationMinutes: alexMondayMinutes,
+      status: TimeEntryStatus.APPROVED,
+      submittedAt: alexMondayClockOut,
+      approvedAt: alexMondayClockOut,
+      submittedById: alexCrewMember.id,
+      approverId: owner.id,
+      approvalNote: 'Auto-approved seed entry',
+      rejectionReason: null,
+      clockInLocation: DEMO_CLOCK_IN_LOCATION,
+      clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
       updatedAt: new Date(),
     },
     create: {
       id: 'time_demo_alex_monday',
       tenantId: tenant.id,
       jobId: activeJob.id,
-      userId: crewMembers[0]?.id ?? owner.id,
-      clockIn: withTime(daysAgo(2), 7, 30),
-      clockOut: withTime(daysAgo(2), 15, 30),
+      userId: alexCrewMember.id,
+      clockIn: alexMondayClockIn,
+      clockOut: alexMondayClockOut,
+      durationMinutes: alexMondayMinutes,
+      status: TimeEntryStatus.APPROVED,
+      submittedAt: alexMondayClockOut,
+      approvedAt: alexMondayClockOut,
+      submittedById: alexCrewMember.id,
+      approverId: owner.id,
+      approvalNote: 'Auto-approved seed entry',
+      rejectionReason: null,
+      clockInLocation: DEMO_CLOCK_IN_LOCATION,
+      clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
     },
   });
+
+  const jordanMondayClockIn = withTime(daysAgo(2), 8, 0);
+  const jordanMondayClockOut = withTime(daysAgo(2), 16, 0);
+  const jordanMondayMinutes = minutesBetween(jordanMondayClockIn, jordanMondayClockOut);
 
   await prisma.timeEntry.upsert({
     where: { id: 'time_demo_jordan_monday' },
     update: {
-      clockIn: withTime(daysAgo(2), 8, 0),
-      clockOut: withTime(daysAgo(2), 16, 0),
+      clockIn: jordanMondayClockIn,
+      clockOut: jordanMondayClockOut,
+      durationMinutes: jordanMondayMinutes,
+      status: TimeEntryStatus.APPROVED,
+      submittedAt: jordanMondayClockOut,
+      approvedAt: jordanMondayClockOut,
+      submittedById: jordanCrewMember.id,
+      approverId: owner.id,
+      approvalNote: 'Auto-approved seed entry',
+      rejectionReason: null,
+      clockInLocation: DEMO_CLOCK_IN_LOCATION,
+      clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
       updatedAt: new Date(),
     },
     create: {
       id: 'time_demo_jordan_monday',
       tenantId: tenant.id,
       jobId: activeJob.id,
-      userId: crewMembers[1]?.id ?? owner.id,
-      clockIn: withTime(daysAgo(2), 8, 0),
-      clockOut: withTime(daysAgo(2), 16, 0),
+      userId: jordanCrewMember.id,
+      clockIn: jordanMondayClockIn,
+      clockOut: jordanMondayClockOut,
+      durationMinutes: jordanMondayMinutes,
+      status: TimeEntryStatus.APPROVED,
+      submittedAt: jordanMondayClockOut,
+      approvedAt: jordanMondayClockOut,
+      submittedById: jordanCrewMember.id,
+      approverId: owner.id,
+      approvalNote: 'Auto-approved seed entry',
+      rejectionReason: null,
+      clockInLocation: DEMO_CLOCK_IN_LOCATION,
+      clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
     },
   });
+
+  const alexTodayClockIn = daysAgo(0);
 
   await prisma.timeEntry.upsert({
     where: { id: 'time_demo_alex_today' },
     update: {
-      clockIn: daysAgo(0),
+      clockIn: alexTodayClockIn,
       clockOut: null,
+      status: TimeEntryStatus.IN_PROGRESS,
+      durationMinutes: null,
+      submittedAt: null,
+      approvedAt: null,
+      submittedById: null,
+      approverId: null,
+      approvalNote: null,
+      rejectionReason: null,
+      clockInLocation: DEMO_CLOCK_IN_LOCATION,
+      clockOutLocation: null,
       updatedAt: new Date(),
     },
     create: {
       id: 'time_demo_alex_today',
       tenantId: tenant.id,
       jobId: activeJob.id,
-      userId: crewMembers[0]?.id ?? owner.id,
-      clockIn: daysAgo(0),
+      userId: alexCrewMember.id,
+      clockIn: alexTodayClockIn,
       clockOut: null,
+      status: TimeEntryStatus.IN_PROGRESS,
+      durationMinutes: null,
+      submittedAt: null,
+      approvedAt: null,
+      submittedById: null,
+      approverId: null,
+      approvalNote: null,
+      rejectionReason: null,
+      clockInLocation: DEMO_CLOCK_IN_LOCATION,
+      clockOutLocation: null,
     },
   });
 

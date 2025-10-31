@@ -20,6 +20,8 @@ const envSchema = z.object({
   STORAGE_PUBLIC_URL: z.string().optional(),
   STORAGE_MAX_UPLOAD_MB: z.string().optional(),
   STORAGE_UPLOAD_EXPIRY_SECONDS: z.string().optional(),
+  STORAGE_SIGNED_URLS: z.string().optional(),
+  STORAGE_DOWNLOAD_EXPIRY_SECONDS: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
   SMTP_SECURE: z.string().optional(),

@@ -1,4 +1,6 @@
-import { IsDateString, IsObject, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDateString, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { LocationSampleDto } from './location-sample.dto';
 
 export class ClockInDto {
   @IsOptional()
@@ -10,8 +12,9 @@ export class ClockInDto {
   notes?: string;
 
   @IsOptional()
-  @IsObject()
-  gps?: Record<string, unknown>;
+  @ValidateNested()
+  @Type(() => LocationSampleDto)
+  location?: LocationSampleDto;
 
   @IsOptional()
   @IsString()

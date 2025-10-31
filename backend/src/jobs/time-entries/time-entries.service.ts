@@ -1,20 +1,37 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { JobStatus, Prisma, TimeEntry } from '@prisma/client';
+import { JobStatus, Prisma, TimeEntry, TimeEntryStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestContextService } from '../../context/request-context.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { ApproveTimeEntryDto, RejectTimeEntryDto } from './dto/review-time-entry.dto';
 import { ListTimeEntriesDto } from './dto/list-time-entries.dto';
+
+export interface TimeEntryLocationSummary {
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+  capturedAt?: string | null;
+}
 
 export interface TimeEntrySummary {
   id: string;
   jobId: string;
   userId: string;
+  status: TimeEntryStatus;
   clockIn: string;
   clockOut: string | null;
   durationSeconds: number | null;
-  gps?: Prisma.JsonValue | null;
-  notes?: string | null;
+  durationMinutes: number | null;
+  clockInLocation: TimeEntryLocationSummary | null;
+  clockOutLocation: TimeEntryLocationSummary | null;
+  notes: string | null;
+  approvalNote: string | null;
+  rejectionReason: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  submittedById: string | null;
+  approverId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,7 +77,10 @@ export class TimeEntriesService {
         jobId,
         userId,
         clockIn: clockInDate,
-        gps: dto.gps ? (dto.gps as Prisma.InputJsonValue) : undefined,
+        status: TimeEntryStatus.IN_PROGRESS,
+        clockInLocation: dto.location
+          ? (dto.location as unknown as Prisma.InputJsonValue)
+          : undefined,
         notes: dto.notes ?? undefined,
       },
     });
@@ -98,6 +118,12 @@ export class TimeEntriesService {
       throw new BadRequestException('This time entry is already completed.');
     }
 
+    if (entry.status !== TimeEntryStatus.IN_PROGRESS) {
+      throw new BadRequestException(
+        'Only in-progress time entries can be clocked out.',
+      );
+    }
+
     const clockOutDate = dto.clockOut ? new Date(dto.clockOut) : new Date();
     if (clockOutDate <= entry.clockIn) {
       throw new BadRequestException(
@@ -105,14 +131,117 @@ export class TimeEntriesService {
       );
     }
 
+    const durationMinutes = Math.floor(
+      (clockOutDate.getTime() - entry.clockIn.getTime()) / 60000,
+    );
+
     const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },
       data: {
         clockOut: clockOutDate,
-        gps: dto.gps
-          ? (dto.gps as Prisma.InputJsonValue)
-          : entry.gps ?? undefined,
+        clockOutLocation: dto.location
+          ? (dto.location as unknown as Prisma.InputJsonValue)
+          : entry.clockOutLocation ?? undefined,
+        durationMinutes,
+        status: TimeEntryStatus.SUBMITTED,
+        submittedAt: clockOutDate,
+        submittedById: userId,
+        rejectionReason: null,
         notes: dto.notes ?? entry.notes ?? undefined,
+      },
+    });
+
+    return this.toSummary(updated);
+  }
+
+  async approve(
+    jobId: string,
+    entryId: string,
+    dto: ApproveTimeEntryDto,
+  ): Promise<TimeEntrySummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const approverId = this.resolveUserId(dto.approverId);
+
+    const entry = await this.prisma.timeEntry.findFirst({
+      where: {
+        tenantId,
+        jobId,
+        id: entryId,
+      },
+    });
+
+    if (!entry) {
+      throw new BadRequestException('Time entry not found');
+    }
+
+    if (!entry.clockOut) {
+      throw new BadRequestException(
+        'Cannot approve a time entry that is still in progress.',
+      );
+    }
+
+    if (
+      entry.status !== TimeEntryStatus.SUBMITTED &&
+      entry.status !== TimeEntryStatus.ADJUSTMENT_REQUESTED
+    ) {
+      throw new BadRequestException(
+        'Only submitted time entries can be approved.',
+      );
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.timeEntry.update({
+      where: { id: entryId },
+      data: {
+        status: TimeEntryStatus.APPROVED,
+        approverId,
+        approvalNote: dto.note ?? null,
+        rejectionReason: null,
+        approvedAt: now,
+      },
+    });
+
+    return this.toSummary(updated);
+  }
+
+  async reject(
+    jobId: string,
+    entryId: string,
+    dto: RejectTimeEntryDto,
+  ): Promise<TimeEntrySummary> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+    const approverId = this.resolveUserId(dto.approverId);
+
+    const entry = await this.prisma.timeEntry.findFirst({
+      where: {
+        tenantId,
+        jobId,
+        id: entryId,
+      },
+    });
+
+    if (!entry) {
+      throw new BadRequestException('Time entry not found');
+    }
+
+    if (!entry.clockOut) {
+      throw new BadRequestException(
+        'Cannot reject a time entry that is still in progress.',
+      );
+    }
+
+    if (entry.status === TimeEntryStatus.APPROVED) {
+      throw new BadRequestException('Approved time entries cannot be rejected.');
+    }
+
+    const updated = await this.prisma.timeEntry.update({
+      where: { id: entryId },
+      data: {
+        status: TimeEntryStatus.ADJUSTMENT_REQUESTED,
+        approverId,
+        approvalNote: dto.note ?? null,
+        rejectionReason: dto.reason,
+        approvedAt: null,
       },
     });
 
@@ -153,7 +282,7 @@ export class TimeEntriesService {
       where: {
         tenantId,
         userId,
-        clockOut: null,
+        status: TimeEntryStatus.IN_PROGRESS,
       },
     });
 
@@ -170,18 +299,62 @@ export class TimeEntriesService {
     const durationSeconds = clockOut
       ? Math.floor((clockOut.getTime() - clockIn.getTime()) / 1000)
       : null;
+    const durationMinutes =
+      entry.durationMinutes ??
+      (durationSeconds !== null ? Math.floor(durationSeconds / 60) : null);
 
     return {
       id: entry.id,
       jobId: entry.jobId,
       userId: entry.userId,
+      status: entry.status,
       clockIn: clockIn.toISOString(),
       clockOut: clockOut?.toISOString() ?? null,
       durationSeconds,
-      gps: entry.gps ?? null,
+      durationMinutes,
+      clockInLocation: this.normalizeLocation(entry.clockInLocation ?? null),
+      clockOutLocation: this.normalizeLocation(entry.clockOutLocation ?? null),
       notes: entry.notes ?? null,
+      approvalNote: entry.approvalNote ?? null,
+      rejectionReason: entry.rejectionReason ?? null,
+      submittedAt: entry.submittedAt
+        ? new Date(entry.submittedAt).toISOString()
+        : null,
+      approvedAt: entry.approvedAt
+        ? new Date(entry.approvedAt).toISOString()
+        : null,
+      submittedById: entry.submittedById ?? null,
+      approverId: entry.approverId ?? null,
       createdAt: entry.createdAt.toISOString(),
       updatedAt: entry.updatedAt.toISOString(),
+    };
+  }
+
+  private normalizeLocation(
+    value: Prisma.JsonValue | null,
+  ): TimeEntryLocationSummary | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+
+    const record = value as Record<string, unknown>;
+    const lat = typeof record.lat === 'number' ? record.lat : null;
+    const lng = typeof record.lng === 'number' ? record.lng : null;
+
+    if (lat === null || lng === null) {
+      return null;
+    }
+
+    const accuracy =
+      typeof record.accuracy === 'number' ? record.accuracy : null;
+    const capturedAt =
+      typeof record.capturedAt === 'string' ? record.capturedAt : null;
+
+    return {
+      lat,
+      lng,
+      accuracy,
+      capturedAt,
     };
   }
 }

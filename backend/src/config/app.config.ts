@@ -23,6 +23,8 @@ export interface AppConfig {
     publicUrl?: string;
     maxUploadBytes: number;
     uploadExpiresInSeconds: number;
+    useSignedUrls: boolean;
+    downloadExpiresInSeconds: number;
   };
   mail: {
     host: string;
@@ -48,6 +50,19 @@ export const createAppConfig = (env: Env): AppConfig => {
     Number.isFinite(rawUploadExpiry) && rawUploadExpiry >= 60
       ? rawUploadExpiry
       : 300;
+
+  const rawDownloadExpiry = env.STORAGE_DOWNLOAD_EXPIRY_SECONDS
+    ? Number(env.STORAGE_DOWNLOAD_EXPIRY_SECONDS)
+    : uploadExpires;
+  const downloadExpires =
+    Number.isFinite(rawDownloadExpiry) && rawDownloadExpiry >= 60
+      ? rawDownloadExpiry
+      : uploadExpires;
+
+  const useSignedUrls =
+    env.STORAGE_SIGNED_URLS !== undefined
+      ? env.STORAGE_SIGNED_URLS.toLowerCase() === 'true'
+      : !env.STORAGE_PUBLIC_URL;
 
   const mailPort = env.SMTP_PORT ? Number(env.SMTP_PORT) : 1025;
 
@@ -84,6 +99,8 @@ export const createAppConfig = (env: Env): AppConfig => {
       publicUrl: env.STORAGE_PUBLIC_URL,
       maxUploadBytes: Math.max(1, maxUploadMb) * 1024 * 1024,
       uploadExpiresInSeconds: uploadExpires,
+      useSignedUrls,
+      downloadExpiresInSeconds: downloadExpires,
     },
     mail: {
       host: env.SMTP_HOST ?? '127.0.0.1',

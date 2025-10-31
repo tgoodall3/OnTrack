@@ -154,6 +154,42 @@ export class EstimateTemplatesService {
     return this.update(id, { isArchived: false });
   }
 
+  async remove(id: string): Promise<void> {
+    const tenantId = this.prisma.getTenantIdOrThrow();
+
+    const template = await this.prisma.estimateTemplate.findFirst({
+      where: { id, tenantId },
+      include: {
+        items: true,
+        _count: {
+          select: {
+            estimates: true,
+          },
+        },
+      },
+    });
+
+    if (!template) {
+      throw new BadRequestException('Estimate template not found');
+    }
+
+    if (template._count.estimates > 0) {
+      throw new BadRequestException(
+        'Cannot delete template while estimates are linked. Remove or archive it instead.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.estimateTemplateItem.deleteMany({
+        where: { templateId: id },
+      });
+
+      await tx.estimateTemplate.delete({
+        where: { id },
+      });
+    });
+  }
+
   async apply(
     templateId: string,
     estimateId: string,

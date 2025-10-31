@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { TaskStatus } from '@prisma/client';
 import { TasksService } from './tasks.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestContextService } from '../context/request-context.service';
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -10,8 +11,12 @@ describe('TasksService', () => {
     job: { findFirst: jest.Mock };
     task: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
     };
+    activityLog: { create: jest.Mock };
   };
+  let requestContext: { context: { userId: string | null } };
 
   beforeEach(async () => {
     prisma = {
@@ -19,11 +24,15 @@ describe('TasksService', () => {
       job: { findFirst: jest.fn() },
       task: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
       },
+      activityLog: { create: jest.fn() },
     };
 
     prisma.getTenantIdOrThrow.mockReturnValue('tenant_1');
     prisma.job.findFirst.mockResolvedValue({ id: 'job_1' });
+    requestContext = { context: { userId: 'user_1' } };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -31,6 +40,10 @@ describe('TasksService', () => {
         {
           provide: PrismaService,
           useValue: prisma,
+        },
+        {
+          provide: RequestContextService,
+          useValue: requestContext,
         },
       ],
     }).compile();

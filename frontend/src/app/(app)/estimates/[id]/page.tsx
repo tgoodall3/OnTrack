@@ -6,7 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarClock, ClipboardList, ExternalLink, FileDown, Layers, Loader2, Timer } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { useEstimateTemplates, useApplyEstimateTemplate } from "@/hooks/use-estimate-templates";
+import {
+  useEstimateTemplates,
+  useApplyEstimateTemplate,
+  useEstimateTemplate,
+  type EstimateTemplateItem,
+} from "@/hooks/use-estimate-templates";
 import { FilesSection } from "@/components/files/files-section";
 import { useEstimateFiles } from "@/hooks/use-files";
 
@@ -241,13 +246,44 @@ const { toast } = useToast();
     [availableTemplates, templateSelection],
   );
   const currentTemplateId = estimate?.template?.id ?? "";
+  const templateIsAvailable = currentTemplateId
+    ? availableTemplates.some((template) => template.id === currentTemplateId)
+    : false;
+  const {
+    data: attachedTemplateDetail,
+    isLoading: attachedTemplateLoading,
+  } = useEstimateTemplate(
+    currentTemplateId && !templateIsAvailable ? currentTemplateId : null,
+    Boolean(currentTemplateId && !templateIsAvailable),
+  );
+  const appliedTemplateOption = useMemo(
+    () => (currentTemplateId ? availableTemplates.find((template) => template.id === currentTemplateId) ?? null : null),
+    [availableTemplates, currentTemplateId],
+  );
+  const appliedTemplateDetail = appliedTemplateOption ?? attachedTemplateDetail ?? null;
+  const templateIsArchived = Boolean(
+    currentTemplateId && appliedTemplateDetail && appliedTemplateDetail.isArchived,
+  );
+  const templateHasAdjustments = useMemo(() => {
+    if (!estimate || !estimate.template?.id || !appliedTemplateDetail) {
+      return false;
+    }
+    return !lineItemsMatchTemplate(estimate.lineItems, appliedTemplateDetail.items);
+  }, [estimate, appliedTemplateDetail]);
+  const reapplyDisabled =
+    !estimate?.template || applyTemplateMutation.isPending || attachedTemplateLoading;
 
   useEffect(() => {
     if (!estimate) {
       return;
     }
-    setTemplateSelection(estimate.template?.id ?? "");
-  }, [estimate?.template?.id]);
+    const appliedId = estimate.template?.id ?? "";
+    if (appliedId && !availableTemplates.some((template) => template.id === appliedId)) {
+      setTemplateSelection("");
+      return;
+    }
+    setTemplateSelection(appliedId);
+  }, [estimate?.template?.id, availableTemplates]);
 
   const updateStatusMutation = useMutation<EstimateDetail, Error, EstimateStatus>({
     mutationFn: (status) => patchEstimateStatus(estimateId, status),
@@ -372,8 +408,10 @@ const { toast } = useToast();
     },
   });
 
-  const handleApplyTemplate = () => {
-    if (!templateSelection) {
+  const handleApplyTemplate = (options?: { templateId?: string; allowReapply?: boolean }) => {
+    const targetTemplateId = options?.templateId ?? templateSelection;
+
+    if (!targetTemplateId) {
       toast({
         variant: "destructive",
         title: "Select a template",
@@ -382,11 +420,23 @@ const { toast } = useToast();
       return;
     }
 
-    const templateName =
-      availableTemplates.find((template) => template.id === templateSelection)?.name ?? "template";
+    if (!options?.allowReapply && targetTemplateId === currentTemplateId) {
+      toast({
+        variant: "destructive",
+        title: "Template already applied",
+        description: "Pick a different template or make manual edits to customize the estimate.",
+      });
+      return;
+    }
+
+    const selected =
+      templateOptions?.find((template) => template.id === targetTemplateId) ?? undefined;
+    const templateName = selected?.name ?? "template";
+
+    setTemplateSelection(targetTemplateId);
 
     applyTemplateMutation.mutate(
-      { templateId: templateSelection },
+      { templateId: targetTemplateId },
       {
         onSuccess: (result) => {
           const updated = result as EstimateDetail;
@@ -394,7 +444,9 @@ const { toast } = useToast();
           toast({
             variant: "success",
             title: "Template applied",
-            description: `Loaded "${templateName}" onto this estimate.`,
+            description: options?.allowReapply
+              ? `Reset to "${templateName}" defaults.`
+              : `Loaded "${templateName}" onto this estimate.`,
           });
           setTemplateSelection(updated.template?.id ?? "");
         },
@@ -687,7 +739,9 @@ const { toast } = useToast();
             ) : templatesLoading ? (
               <div className="h-10 rounded-2xl border border-dashed border-border/60 bg-muted/30 animate-pulse" />
             ) : availableTemplates.length === 0 ? (
-              <p className="text-xs">No templates available yet. Create one from the templates manager.</p>
+              <p className="text-xs">
+                No active templates available. Create a new template in the manager or keep editing this estimate manually.
+              </p>
             ) : (
               <>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -706,7 +760,7 @@ const { toast } = useToast();
                   </select>
                   <button
                     type="button"
-                    onClick={handleApplyTemplate}
+                    onClick={() => handleApplyTemplate()}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wide text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60 sm:w-auto"
                     disabled={templateApplyDisabled}
                   >
@@ -749,6 +803,31 @@ const { toast } = useToast();
                   </div>
                 )}
               </>
+            )}
+            {estimate.template && attachedTemplateLoading && !appliedTemplateDetail && (
+              <p className="mt-2 text-xs text-muted-foreground/80">Loading template details…</p>
+            )}
+            {estimate.template && templateIsArchived && (
+              <div className="mt-3 rounded-2xl border border-dashed border-border/60 bg-amber-100/40 px-3 py-2 text-xs text-amber-900">
+                This template is archived. You can keep the current line items or choose a new template to replace it.
+              </div>
+            )}
+            {estimate.template && templateHasAdjustments && appliedTemplateDetail && !templateIsArchived && (
+              <div className="mt-3 space-y-2 rounded-2xl border border-accent/40 bg-accent/10 px-3 py-3 text-xs text-accent-foreground">
+                <p>
+                  Line items were edited after applying <span className="font-semibold">{appliedTemplateDetail.name}</span>.
+                  Reapply to reset quantities and pricing.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleApplyTemplate({ templateId: appliedTemplateDetail.id, allowReapply: true })}
+                  className="inline-flex items-center gap-2 rounded-full border border-accent px-3 py-1 text-[0.75rem] font-semibold uppercase tracking-wide transition hover:bg-accent/10 disabled:opacity-60"
+                  disabled={reapplyDisabled}
+                >
+                  {applyTemplateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                  Reapply template defaults
+                </button>
+              </div>
             )}
           </div>
 
@@ -1068,6 +1147,42 @@ const { toast } = useToast();
       </section>
     </div>
   );
+}
+
+function lineItemsMatchTemplate(
+  lineItems: EstimateDetail["lineItems"],
+  templateItems: EstimateTemplateItem[],
+): boolean {
+  if (templateItems.length === 0) {
+    return lineItems.length === 0;
+  }
+
+  if (lineItems.length !== templateItems.length) {
+    return false;
+  }
+
+  for (let index = 0; index < templateItems.length; index += 1) {
+    const estimateItem = lineItems[index];
+    const templateItem = templateItems[index];
+
+    if (!estimateItem) {
+      return false;
+    }
+
+    if (estimateItem.description.trim() !== templateItem.description.trim()) {
+      return false;
+    }
+
+    if (Number(estimateItem.quantity) !== Number(templateItem.quantity)) {
+      return false;
+    }
+
+    if (Number(estimateItem.unitPrice) !== Number(templateItem.unitPrice)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function SnapshotRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

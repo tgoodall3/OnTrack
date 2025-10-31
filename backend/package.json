@@ -25,7 +25,8 @@
     "prisma:pull": "prisma db pull",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node ../scripts/run-manual-seed.js",
-    "db:seed:prisma": "cross-env DOTENV_CONFIG_PATH=.env ts-node -r dotenv/config --project tsconfig.json prisma/seed.ts"
+    "db:seed:prisma": "cross-env DOTENV_CONFIG_PATH=.env ts-node -r dotenv/config --project tsconfig.json prisma/seed.ts",
+    "files:backfill-previews": "ts-node -r tsconfig-paths/register -r dotenv/config scripts/backfill-file-previews.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.679.0",

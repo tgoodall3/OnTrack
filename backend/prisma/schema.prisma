@@ -57,6 +57,8 @@ model User {
   assignedTasks        Task[]              @relation("TaskAssignee")
   checklistAssignments TaskChecklistItem[] @relation("TaskChecklistAssignment")
   timeEntries          TimeEntry[]
+  submittedTimeEntries TimeEntry[]         @relation("TimeEntrySubmittedBy")
+  approvedTimeEntries  TimeEntry[]         @relation("TimeEntryApprovedBy")
   tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roleAssignments      UserRole[]
 
@@ -289,19 +291,35 @@ model TaskChecklistItem {
 }
 
 model TimeEntry {
-  id        String    @id @default(cuid())
-  tenantId  String
-  jobId     String
-  userId    String
-  clockIn   DateTime
-  clockOut  DateTime?
-  gps       Json?
-  notes     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String            @id @default(cuid())
+  tenantId        String
+  jobId           String
+  userId          String
+  submittedById   String?
+  approverId      String?
+  clockIn         DateTime
+  clockOut        DateTime?
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  approvalNote    String?
+  rejectionReason String?
+  status          TimeEntryStatus   @default(IN_PROGRESS)
+  durationMinutes Int?
+  clockInLocation Json?
+  clockOutLocation Json?
+  notes           String?
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  job             Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submittedBy     User?             @relation("TimeEntrySubmittedBy", fields: [submittedById], references: [id])
+  approver        User?             @relation("TimeEntryApprovedBy", fields: [approverId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, userId, clockIn])
+  @@index([tenantId, jobId, clockIn])
 }
 
 model MaterialUsage {
@@ -480,6 +498,14 @@ enum TaskStatus {
   IN_PROGRESS
   COMPLETE
   BLOCKED
+}
+
+enum TimeEntryStatus {
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  REJECTED
+  ADJUSTMENT_REQUESTED
 }
 
 enum InvoiceStatus {
