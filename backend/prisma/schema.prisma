@@ -59,6 +59,8 @@ model User {
   timeEntries          TimeEntry[]
   submittedTimeEntries TimeEntry[]         @relation("TimeEntrySubmittedBy")
   approvedTimeEntries  TimeEntry[]         @relation("TimeEntryApprovedBy")
+  recordedMaterials    MaterialUsage[]     @relation("MaterialRecordedBy")
+  approvedMaterials    MaterialUsage[]     @relation("MaterialApprovedBy")
   tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roleAssignments      UserRole[]
 
@@ -301,7 +303,6 @@ model TimeEntry {
   clockOut        DateTime?
   submittedAt     DateTime?
   approvedAt      DateTime?
-  approvalNote    String?
   rejectionReason String?
   status          TimeEntryStatus   @default(IN_PROGRESS)
   durationMinutes Int?
@@ -331,12 +332,27 @@ model MaterialUsage {
   unitCost  Decimal  @default(0) @db.Decimal(12, 2)
   notes     String?
   metadata  Json?
+  costCode  String?
+  recordedById String?
+  approvalStatus MaterialApprovalStatus @default(SUBMITTED)
+  approverId String?
+  approvedAt DateTime?
+  rejectionReason String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recordedBy User?   @relation("MaterialRecordedBy", fields: [recordedById], references: [id])
+  approver   User?   @relation("MaterialApprovedBy", fields: [approverId], references: [id])
 
   @@index([tenantId, sku])
+  @@index([tenantId, approvalStatus])
+}
+
+enum MaterialApprovalStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
 }
 
 model Invoice {

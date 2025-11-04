@@ -9,6 +9,7 @@ import {
   TaskStatus,
   TenantPlan,
   TimeEntryStatus,
+  MaterialApprovalStatus,
 } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -547,10 +548,12 @@ async function seedTenant() {
       approvedAt: alexMondayClockOut,
       submittedById: alexCrewMember.id,
       approverId: owner.id,
-      approvalNote: 'Auto-approved seed entry',
       rejectionReason: null,
       clockInLocation: DEMO_CLOCK_IN_LOCATION,
       clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
+      metadata: {
+        approvalNote: 'Auto-approved seed entry',
+      } as Prisma.JsonValue,
       updatedAt: new Date(),
     },
     create: {
@@ -566,10 +569,12 @@ async function seedTenant() {
       approvedAt: alexMondayClockOut,
       submittedById: alexCrewMember.id,
       approverId: owner.id,
-      approvalNote: 'Auto-approved seed entry',
       rejectionReason: null,
       clockInLocation: DEMO_CLOCK_IN_LOCATION,
       clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
+      metadata: {
+        approvalNote: 'Auto-approved seed entry',
+      } as Prisma.JsonValue,
     },
   });
 
@@ -588,10 +593,12 @@ async function seedTenant() {
       approvedAt: jordanMondayClockOut,
       submittedById: jordanCrewMember.id,
       approverId: owner.id,
-      approvalNote: 'Auto-approved seed entry',
       rejectionReason: null,
       clockInLocation: DEMO_CLOCK_IN_LOCATION,
       clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
+      metadata: {
+        approvalNote: 'Auto-approved seed entry',
+      } as Prisma.JsonValue,
       updatedAt: new Date(),
     },
     create: {
@@ -607,10 +614,12 @@ async function seedTenant() {
       approvedAt: jordanMondayClockOut,
       submittedById: jordanCrewMember.id,
       approverId: owner.id,
-      approvalNote: 'Auto-approved seed entry',
       rejectionReason: null,
       clockInLocation: DEMO_CLOCK_IN_LOCATION,
       clockOutLocation: DEMO_CLOCK_OUT_LOCATION,
+      metadata: {
+        approvalNote: 'Auto-approved seed entry',
+      } as Prisma.JsonValue,
     },
   });
 
@@ -627,10 +636,10 @@ async function seedTenant() {
       approvedAt: null,
       submittedById: null,
       approverId: null,
-      approvalNote: null,
       rejectionReason: null,
       clockInLocation: DEMO_CLOCK_IN_LOCATION,
       clockOutLocation: null,
+      metadata: Prisma.JsonNull,
       updatedAt: new Date(),
     },
     create: {
@@ -646,10 +655,45 @@ async function seedTenant() {
       approvedAt: null,
       submittedById: null,
       approverId: null,
-      approvalNote: null,
       rejectionReason: null,
       clockInLocation: DEMO_CLOCK_IN_LOCATION,
       clockOutLocation: null,
+      metadata: Prisma.JsonNull,
+    },
+  });
+
+  await prisma.materialUsage.create({
+    data: {
+      tenantId: tenant.id,
+      jobId: activeJob.id,
+      sku: 'SHINGLE-BUNDLE',
+      costCode: 'MAT-SHINGLE',
+      quantity: new Prisma.Decimal(12),
+      unitCost: new Prisma.Decimal(35.5),
+      notes: 'Architectural shingles delivered to site',
+      metadata: {
+        vendor: 'RoofPro Supply',
+        poNumber: 'PO-1123',
+        approvalNote: 'Approved for invoicing',
+      },
+      recordedById: alexCrewMember.id,
+      approvalStatus: MaterialApprovalStatus.APPROVED,
+      approverId: owner.id,
+      approvedAt: new Date(),
+    },
+  });
+
+  await prisma.materialUsage.create({
+    data: {
+      tenantId: tenant.id,
+      jobId: activeJob.id,
+      sku: 'FASTENER-BOX',
+      costCode: 'MAT-FASTENER',
+      quantity: new Prisma.Decimal(4),
+      unitCost: new Prisma.Decimal(18.75),
+      notes: 'Ring shank nails',
+      recordedById: jordanCrewMember.id,
+      approvalStatus: MaterialApprovalStatus.SUBMITTED,
     },
   });
 

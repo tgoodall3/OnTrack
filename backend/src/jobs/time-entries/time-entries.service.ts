@@ -135,20 +135,30 @@ export class TimeEntriesService {
       (clockOutDate.getTime() - entry.clockIn.getTime()) / 60000,
     );
 
+    const metadataValue = this.applyApprovalNote(entry.metadata, null);
+    const data: Prisma.TimeEntryUncheckedUpdateInput = {
+      clockOut: clockOutDate,
+      clockOutLocation: dto.location
+        ? (dto.location as unknown as Prisma.InputJsonValue)
+        : entry.clockOutLocation ?? undefined,
+      durationMinutes,
+      status: TimeEntryStatus.SUBMITTED,
+      submittedAt: clockOutDate,
+      submittedById: userId,
+      rejectionReason: null,
+      notes: dto.notes ?? entry.notes ?? undefined,
+    };
+
+    if (metadataValue !== undefined) {
+      data.metadata =
+        metadataValue === null
+          ? Prisma.JsonNull
+          : (metadataValue as Prisma.InputJsonValue);
+    }
+
     const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },
-      data: {
-        clockOut: clockOutDate,
-        clockOutLocation: dto.location
-          ? (dto.location as unknown as Prisma.InputJsonValue)
-          : entry.clockOutLocation ?? undefined,
-        durationMinutes,
-        status: TimeEntryStatus.SUBMITTED,
-        submittedAt: clockOutDate,
-        submittedById: userId,
-        rejectionReason: null,
-        notes: dto.notes ?? entry.notes ?? undefined,
-      },
+      data,
     });
 
     return this.toSummary(updated);
@@ -189,16 +199,28 @@ export class TimeEntriesService {
       );
     }
 
+    const metadataValue = this.applyApprovalNote(
+      entry.metadata,
+      dto.note ?? null,
+    );
     const now = new Date();
+    const data: Prisma.TimeEntryUncheckedUpdateInput = {
+      status: TimeEntryStatus.APPROVED,
+      approverId,
+      rejectionReason: null,
+      approvedAt: now,
+    };
+
+    if (metadataValue !== undefined) {
+      data.metadata =
+        metadataValue === null
+          ? Prisma.JsonNull
+          : (metadataValue as Prisma.InputJsonValue);
+    }
+
     const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },
-      data: {
-        status: TimeEntryStatus.APPROVED,
-        approverId,
-        approvalNote: dto.note ?? null,
-        rejectionReason: null,
-        approvedAt: now,
-      },
+      data,
     });
 
     return this.toSummary(updated);
@@ -234,15 +256,27 @@ export class TimeEntriesService {
       throw new BadRequestException('Approved time entries cannot be rejected.');
     }
 
+    const metadataValue = this.applyApprovalNote(
+      entry.metadata,
+      dto.note ?? null,
+    );
+    const data: Prisma.TimeEntryUncheckedUpdateInput = {
+      status: TimeEntryStatus.ADJUSTMENT_REQUESTED,
+      approverId,
+      rejectionReason: dto.reason,
+      approvedAt: null,
+    };
+
+    if (metadataValue !== undefined) {
+      data.metadata =
+        metadataValue === null
+          ? Prisma.JsonNull
+          : (metadataValue as Prisma.InputJsonValue);
+    }
+
     const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },
-      data: {
-        status: TimeEntryStatus.ADJUSTMENT_REQUESTED,
-        approverId,
-        approvalNote: dto.note ?? null,
-        rejectionReason: dto.reason,
-        approvedAt: null,
-      },
+      data,
     });
 
     return this.toSummary(updated);
@@ -303,6 +337,8 @@ export class TimeEntriesService {
       entry.durationMinutes ??
       (durationSeconds !== null ? Math.floor(durationSeconds / 60) : null);
 
+    const approvalNote = this.extractApprovalNote(entry.metadata ?? null);
+
     return {
       id: entry.id,
       jobId: entry.jobId,
@@ -315,7 +351,7 @@ export class TimeEntriesService {
       clockInLocation: this.normalizeLocation(entry.clockInLocation ?? null),
       clockOutLocation: this.normalizeLocation(entry.clockOutLocation ?? null),
       notes: entry.notes ?? null,
-      approvalNote: entry.approvalNote ?? null,
+      approvalNote,
       rejectionReason: entry.rejectionReason ?? null,
       submittedAt: entry.submittedAt
         ? new Date(entry.submittedAt).toISOString()
@@ -356,5 +392,63 @@ export class TimeEntriesService {
       accuracy,
       capturedAt,
     };
+  }
+
+  private normalizeMetadata(
+    value: Prisma.JsonValue | null | undefined,
+  ): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    return { ...(value as Record<string, unknown>) };
+  }
+
+  private applyApprovalNote(
+    existing: Prisma.JsonValue | null | undefined,
+    note: string | null | undefined,
+  ): Prisma.InputJsonValue | null | undefined {
+    if (note === undefined) {
+      return undefined;
+    }
+
+    const base = this.normalizeMetadata(existing);
+
+    if (note === null || !note.trim()) {
+      if (!base) {
+        return null;
+      }
+
+      if (!('approvalNote' in base)) {
+        return Object.keys(base).length ? (base as Prisma.InputJsonValue) : null;
+      }
+
+      const { approvalNote: _removed, ...rest } = base;
+      return Object.keys(rest).length ? (rest as Prisma.InputJsonValue) : null;
+    }
+
+    return {
+      ...(base ?? {}),
+      approvalNote: note.trim(),
+    } as Prisma.InputJsonValue;
+  }
+
+  private extractApprovalNote(
+    metadata: Prisma.JsonValue | null | undefined,
+  ): string | null {
+    const base = this.normalizeMetadata(metadata);
+    if (!base) {
+      return null;
+    }
+
+    if (typeof base.approvalNote === 'string' && base.approvalNote.trim()) {
+      const note = base.approvalNote.trim();
+      return note;
+    }
+
+    if ('approvalNote' in base) {
+      return null;
+    }
+
+    return null;
   }
 }

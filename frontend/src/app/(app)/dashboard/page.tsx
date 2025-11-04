@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Coins,
   MapPin,
+  Timer,
   Users,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ type DashboardMetrics = {
     active: number;
     upcomingVisits: number;
     crewUtilization: number;
+    pendingApprovals: number;
   };
   pipeline: {
     newLeads: number;
@@ -121,6 +123,17 @@ export default function DashboardPage() {
               ? "Within target"
               : "Awaiting data",
         icon: Users,
+      },
+      {
+        label: "Pending Approvals",
+        value: metrics ? metrics.jobs.pendingApprovals.toString() : "—",
+        trend:
+          metrics && metrics.jobs.pendingApprovals > 0
+            ? "Needs supervisor review"
+            : metrics
+              ? "All entries approved"
+              : "Awaiting data",
+        icon: Timer,
       },
       {
         label: "Pipeline Value",

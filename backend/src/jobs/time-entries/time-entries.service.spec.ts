@@ -15,7 +15,6 @@ const buildEntry = (overrides: Partial<TimeEntry> = {}): TimeEntry => ({
   clockOut: null,
   submittedAt: null,
   approvedAt: null,
-  approvalNote: null,
   rejectionReason: null,
   status: TimeEntryStatus.IN_PROGRESS,
   durationMinutes: null,
@@ -366,33 +365,33 @@ describe('TimeEntriesService', () => {
         }),
       );
 
-      prisma.timeEntry.update.mockResolvedValue(
-        buildEntry({
-          id: 'entry_submitted',
-          clockOut,
+    prisma.timeEntry.update.mockResolvedValue(
+      buildEntry({
+        id: 'entry_submitted',
+        clockOut,
+        status: TimeEntryStatus.APPROVED,
+        submittedAt: clockOut,
+        submittedById: 'user_1',
+        approverId: 'supervisor_1',
+        metadata: { approvalNote: 'looks good' },
+        approvedAt: clockOut,
+      }),
+    );
+
+    const result = await service.approve('job_1', 'entry_submitted', {
+      note: 'looks good',
+    });
+
+    expect(prisma.timeEntry.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'entry_submitted' },
+        data: expect.objectContaining({
           status: TimeEntryStatus.APPROVED,
-          submittedAt: clockOut,
-          submittedById: 'user_1',
           approverId: 'supervisor_1',
-          approvalNote: 'looks good',
-          approvedAt: clockOut,
+          metadata: { approvalNote: 'looks good' },
         }),
-      );
-
-      const result = await service.approve('job_1', 'entry_submitted', {
-        note: 'looks good',
-      });
-
-      expect(prisma.timeEntry.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'entry_submitted' },
-          data: expect.objectContaining({
-            status: TimeEntryStatus.APPROVED,
-            approverId: 'supervisor_1',
-            approvalNote: 'looks good',
-          }),
-        }),
-      );
+      }),
+    );
 
       expect(result).toEqual(
         expect.objectContaining({
@@ -443,33 +442,33 @@ describe('TimeEntriesService', () => {
         }),
       );
 
-      prisma.timeEntry.update.mockResolvedValue(
-        buildEntry({
-          id: 'entry_review',
-          clockOut,
-          status: TimeEntryStatus.ADJUSTMENT_REQUESTED,
-          approverId: 'supervisor_2',
-          rejectionReason: 'Missing travel time',
-          approvalNote: 'Please adjust',
-        }),
-      );
+    prisma.timeEntry.update.mockResolvedValue(
+      buildEntry({
+        id: 'entry_review',
+        clockOut,
+        status: TimeEntryStatus.ADJUSTMENT_REQUESTED,
+        approverId: 'supervisor_2',
+        rejectionReason: 'Missing travel time',
+        metadata: { approvalNote: 'Please adjust' },
+      }),
+    );
 
       const result = await service.reject('job_1', 'entry_review', {
         reason: 'Missing travel time',
         note: 'Please adjust',
       });
 
-      expect(prisma.timeEntry.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'entry_review' },
-          data: expect.objectContaining({
-            status: TimeEntryStatus.ADJUSTMENT_REQUESTED,
-            rejectionReason: 'Missing travel time',
-            approvalNote: 'Please adjust',
-            approverId: 'supervisor_2',
-          }),
+    expect(prisma.timeEntry.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'entry_review' },
+        data: expect.objectContaining({
+          status: TimeEntryStatus.ADJUSTMENT_REQUESTED,
+          rejectionReason: 'Missing travel time',
+          metadata: { approvalNote: 'Please adjust' },
+          approverId: 'supervisor_2',
         }),
-      );
+      }),
+    );
 
       expect(result).toEqual(
         expect.objectContaining({

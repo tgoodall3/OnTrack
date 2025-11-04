@@ -85,6 +85,16 @@
   - Build crew-side time sheet UI with status chips (in-progress/submitted/approved) and expose approve/reject flows to supervisors.
   - Surface location breadcrumbs on job detail (map preview + accuracy) and guard against missing coordinates.
   - Refresh dashboard utilization widgets to rely on `durationMinutes` and approval metadata to avoid double counting.
+- **Materials Logging Blueprint**
+  - **Domain model**: add `MaterialEntry` (tenant, job, author, cost code, quantity, unit cost, notes, attachments) plus lookup table for catalog items or allow ad-hoc strings; track approval status and inventory impact flags.
+  - **API slice**: REST routes `GET /jobs/:id/materials`, `POST /jobs/:id/materials`, `PATCH /jobs/:id/materials/:entryId`, `POST /jobs/:id/materials/:entryId/approve`, `POST /jobs/:id/materials/:entryId/reject`; enforce tenant guard, crew authorisation, and activity logs.
+  - **Workers / integrations**: enqueue cost roll-up job on approval to update job profitability + pipeline metrics; leave hook for future inventory integrations.
+  - **UX plan**: mobile-first quick add (photo + barcode scan), inline cost code picker, approval queue on dashboard; highlight budget drift (actual vs. estimate) per job.
+  - **Validation**: server-side schema for quantity/unit cost (decimal precision), require reason on rejection, soft delete with audit.
+- **Implementation Notes (Nov 2025)**
+  - Backend exposes `/jobs/:jobId/materials` endpoints for list/create/update/approve/reject; data shape matches the blueprint and ties into dashboard utilisation and pending approvals metrics.
+  - Crew board now supports quick material logging, status chips, and supervisor approvals in-line with time tracking.
+  - Run `pnpm --filter @ontrack/api exec ts-node -r tsconfig-paths/register scripts/apply-materials-schema.ts` once locally to backfill database columns until Prisma migrations can be regenerated.
 
 ## Phase 4 - Billing & Payments (Week 9)
 - Invoice generation from jobs/change orders, reminders, balance tracking.

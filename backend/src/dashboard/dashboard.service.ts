@@ -6,6 +6,7 @@ import {
   Prisma,
   RoleKey,
   TaskStatus,
+  TimeEntryStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -14,6 +15,7 @@ export interface DashboardMetrics {
     active: number;
     upcomingVisits: number;
     crewUtilization: number;
+    pendingApprovals: number;
   };
   pipeline: {
     newLeads: number;
@@ -65,6 +67,7 @@ export class DashboardService {
       upcomingVisits,
       crewMembers,
       timeEntries,
+      pendingApprovalsCount,
       newLeads,
       estimatesSent,
       estimatesApproved,
@@ -112,6 +115,19 @@ export class DashboardService {
         select: {
           clockIn: true,
           clockOut: true,
+          durationMinutes: true,
+          status: true,
+        },
+      }),
+      this.prisma.timeEntry.count({
+        where: {
+          tenantId,
+          status: {
+            in: [
+              TimeEntryStatus.SUBMITTED,
+              TimeEntryStatus.ADJUSTMENT_REQUESTED,
+            ],
+          },
         },
       }),
       this.prisma.lead.count({
@@ -248,6 +264,7 @@ export class DashboardService {
         active: activeJobs,
         upcomingVisits,
         crewUtilization,
+        pendingApprovals: pendingApprovalsCount,
       },
       pipeline: {
         newLeads,
@@ -264,19 +281,38 @@ export class DashboardService {
 
   private calculateCrewUtilization(
     crewMembers: number,
-    timeEntries: Array<{ clockIn: Date; clockOut: Date | null }>,
+    timeEntries: Array<{
+      clockIn: Date;
+      clockOut: Date | null;
+      durationMinutes: number | null;
+      status: TimeEntryStatus;
+    }>,
     referenceDate: Date,
   ): number {
-    if (!crewMembers) {
+    if (!crewMembers || crewMembers <= 0) {
       return 0;
     }
 
-    const totalMilliseconds = timeEntries.reduce((accumulator, entry) => {
+    const relevantEntries = timeEntries.filter(
+      (entry) =>
+        entry.status === TimeEntryStatus.APPROVED ||
+        entry.status === TimeEntryStatus.SUBMITTED ||
+        entry.status === TimeEntryStatus.ADJUSTMENT_REQUESTED,
+    );
+
+    const totalMinutes = relevantEntries.reduce((accumulator, entry) => {
+      if (typeof entry.durationMinutes === 'number' && entry.durationMinutes > 0) {
+        return accumulator + entry.durationMinutes;
+      }
+
       const end = entry.clockOut ?? referenceDate;
-      const duration = end.getTime() - entry.clockIn.getTime();
-      return duration > 0 ? accumulator + duration : accumulator;
+      const durationMs = end.getTime() - entry.clockIn.getTime();
+      if (durationMs <= 0) {
+        return accumulator;
+      }
+
+      return accumulator + Math.round(durationMs / 60000);
     }, 0);
-    const totalMinutes = totalMilliseconds / (1000 * 60);
 
     const capacityMinutes = crewMembers * 40 * 60; // assume 40h weekly schedule
     if (capacityMinutes <= 0) {

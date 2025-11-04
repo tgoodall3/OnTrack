@@ -428,7 +428,6 @@ describe('JobsService', () => {
               clockInLocation: null,
               clockOutLocation: null,
               notes: null,
-              approvalNote: null,
               rejectionReason: null,
               submittedAt: null,
               submittedById: null,

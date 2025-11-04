@@ -19,6 +19,8 @@ import { UsersModule } from './users/users.module';
 import { ChecklistsModule } from './checklists/checklists.module';
 import { EstimateTemplatesModule } from './estimate-templates/estimate-templates.module';
 import { FilesModule } from './files/files.module';
+import { MaterialsModule } from './materials/materials.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { FilesModule } from './files/files.module';
     ]),
     RequestContextModule,
     PrismaModule,
+    StorageModule,
     DashboardModule,
     LeadsModule,
     ContactsModule,
@@ -50,6 +53,7 @@ import { FilesModule } from './files/files.module';
     UsersModule,
     ChecklistsModule,
     FilesModule,
+    MaterialsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
